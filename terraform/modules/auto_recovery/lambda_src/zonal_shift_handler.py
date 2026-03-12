@@ -128,11 +128,7 @@ def _start_zonal_shift(az: str) -> dict:
     # ARC API expects an ISO-8601 string; datetime.isoformat() produces the correct format.
     expiry_str = expiry_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    comment = (
-        f"Auto-recovery: CloudWatch 5XX alarm detected in {az}. "
-        f"Zonal shift initiated by Lambda auto-recovery system. "
-        f"Expires at {expiry_str} UTC."
-    )
+    comment = f"Auto-recovery: 5XX alarm in {az}. Expires: {expiry_str} UTC."
 
     logger.info(
         "Starting zonal shift: resource=%s, awayFrom=%s, expiresAt=%s",
