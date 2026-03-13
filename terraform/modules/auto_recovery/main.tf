@@ -104,6 +104,8 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
 #    Python 3.12 runtime. boto3 is included in the Lambda execution
 #    environment by default — no Lambda Layer needed for SDK access.
 # ---------------------------------------------------------------------------
+data "aws_availability_zones" "current_azs" {}
+
 resource "aws_lambda_function" "zonal_shift" {
   function_name = "${var.project_prefix}-auto-recovery"
   description   = "Closed-Loop Auto-Recovery: invoked by CW Alarms to trigger ARC Zonal Shift on ALB 5XX spikes."
@@ -123,6 +125,8 @@ resource "aws_lambda_function" "zonal_shift" {
       # Passed as env vars so the Lambda handler has no hardcoded values
       ALB_ARN        = var.alb_arn
       EXPIRY_MINUTES = tostring(var.zonal_shift_expiry_minutes)
+      # Translator: AZ Name (e.g. eu-central-1a) -> AZ ID (e.g. euc1-az1)
+      AZ_MAPPING     = jsonencode(zipmap(data.aws_availability_zones.current_azs.names, data.aws_availability_zones.current_azs.zone_ids))
     }
   }
 
@@ -185,7 +189,6 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx_per_az" {
 
   alarm_name        = "${var.project_prefix}-5xx-alarm-${each.key}"
   alarm_description = "5XX error spike in AZ ${each.key} on ALB — triggers ARC Zonal Shift auto-recovery."
-
   namespace   = "AWS/ApplicationELB"
   metric_name = "HTTPCode_Target_5XX_Count"
   statistic   = "Sum"
@@ -214,7 +217,6 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx_per_az" {
   # Do NOT set ok_actions — we intentionally let the zonal shift expire on its
   # own schedule (EXPIRY_MINUTES) rather than cancelling it when the alarm
   # clears, to avoid flapping.
-
   tags = merge(var.tags, {
     Name             = "${var.project_prefix}-5xx-alarm-${each.key}"
     AvailabilityZone = each.key

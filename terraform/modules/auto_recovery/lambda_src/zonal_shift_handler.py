@@ -16,6 +16,7 @@ Flow:
 Environment variables (set by Terraform):
   ALB_ARN          - Full ARN of the target ALB.
   EXPIRY_MINUTES   - Zonal shift expiry window in minutes (default: 30).
+  AZ_MAPPING       - JSON map translating AZ Name (e.g. eu-central-1a) to AZ ID (e.g. euc1-az1).
 
 For idempotency: if a zonal shift already exists for this AZ+resource,
 StartZonalShift returns the existing record, so repeated alarm firings
@@ -38,34 +39,13 @@ logger.setLevel(logging.INFO)
 # ---------------------------------------------------------------------------
 ALB_ARN = os.environ["ALB_ARN"]
 EXPIRY_MINUTES = int(os.environ.get("EXPIRY_MINUTES", "30"))
+AZ_MAPPING = json.loads(os.environ.get("AZ_MAPPING", "{}"))
 
 
 def _extract_failing_az(event: dict) -> str | None:
     """
     Parse the CloudWatch Alarm invocation payload and return the value of the
     AvailabilityZone dimension, or None if it cannot be found.
-
-    CloudWatch direct-invocation payload structure (simplified):
-    {
-      "alarmData": {
-        "alarmName": "...",
-        "state": { "value": "ALARM", ... },
-        "configuration": {
-          "metrics": [
-            {
-              "metricStat": {
-                "metric": {
-                  "dimensions": {
-                    "AvailabilityZone": "eu-central-1a",
-                    "LoadBalancer": "app/my-alb/..."
-                  }
-                }
-              }
-            }
-          ]
-        }
-      }
-    }
     """
     try:
         alarm_data = event.get("alarmData", {})
@@ -122,6 +102,11 @@ def _start_zonal_shift(az: str) -> dict:
     The expiry time is computed as UTC now + EXPIRY_MINUTES. ARC requires
     an ISO-8601 datetime string ending in 'Z'.
     """
+    
+    az_id = AZ_MAPPING.get(az)
+    if not az_id:
+        raise ValueError(f"No AZ ID mapping found for {az}")
+
     client = boto3.client("arc-zonal-shift")
 
     expiry_dt = datetime.now(tz=timezone.utc) + timedelta(minutes=EXPIRY_MINUTES)
@@ -131,15 +116,16 @@ def _start_zonal_shift(az: str) -> dict:
     comment = f"Auto-recovery: 5XX alarm in {az}. Expires: {expiry_str} UTC."
 
     logger.info(
-        "Starting zonal shift: resource=%s, awayFrom=%s, expiresAt=%s",
+        "Starting zonal shift: resource=%s, awayFrom=%s (ID: %s), expiresAt=%s",
         ALB_ARN,
         az,
+        az_id,
         expiry_str,
     )
 
     response = client.start_zonal_shift(
         resourceIdentifier=ALB_ARN,
-        awayFrom=az,
+        awayFrom=az_id,
         expiresIn=f"{EXPIRY_MINUTES}m",  # ARC accepts "<N>m" or "<N>h" duration strings
         comment=comment,
     )
