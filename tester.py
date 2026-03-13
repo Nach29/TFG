@@ -3,7 +3,7 @@ import urllib.error
 import time
 import re
 
-ALB_URL = "http://tfg-student-icolasma-tfg-alb-647638739.eu-central-1.elb.amazonaws.com"
+ALB_URL = "http://tfg-student-icolasma-tfg-alb-1275061838.eu-central-1.elb.amazonaws.com/"
 
 print(f"Iniciando inyección de tráfico hacia: {ALB_URL}")
 print("Esperando respuestas...")
