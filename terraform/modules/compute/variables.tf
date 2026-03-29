@@ -13,11 +13,7 @@ variable "ami_id" {
 }
 
 variable "instance_type" {
-  description = <<-EOT
-    EC2 instance type.
-    Default: t3.micro (~$0.0104/hr, cheapest current-gen). 
-    Alternatively: t2.micro (AWS Free Tier eligible, 750 hrs/month for 12 months).
-  EOT
+  description = "Type of the EC2 instance."
   type        = string
   default     = "t3.micro"
 }
