@@ -6,7 +6,7 @@ from datetime import datetime
 
 # --- CONFIGURACIÓN ---
 # Sustituye esto por la URL de tu balanceador
-ALB_URL = "http://TU-BALANCEADOR-AQUI.elb.amazonaws.com"
+ALB_URL = "http://tfg-student-icolasma-tfg-alb-487036306.eu-central-1.elb.amazonaws.com"
 TIEMPO_ESPERA = 0.5 # Medio segundo entre peticiones
 
 # --- VARIABLES DE TELEMETRÍA ---

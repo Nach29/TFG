@@ -65,7 +65,7 @@ cat > /var/www/html/index.php <<EOF
     <span class="badge">Web tier &middot; Dynamic PHP Response</span>
     <table>
       <tr><td>Web Instance</td><td>${instance_name}</td></tr>
-      <tr><td>Web AZ</td><td>$AZ</td></tr>
+      <tr><td>Availability Zone</td><td>$AZ</td></tr>
       <tr><td>Web Region</td><td>$REGION</td></tr>
       
       <?php
