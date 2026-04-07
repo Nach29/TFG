@@ -67,3 +67,16 @@ resource "aws_iam_instance_profile" "this" {
     Name = var.instance_profile_name
   }
 }
+
+# =============================================================================
+# Required providers — permite que el root pase provider aliases (e.g. aws.ireland)
+# Ref: https://developer.hashicorp.com/terraform/language/modules/develop/providers
+# =============================================================================
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.31, < 7.0"
+    }
+  }
+}

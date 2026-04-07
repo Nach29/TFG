@@ -1,28 +1,28 @@
 # =============================================================================
-# DYNAMODB MODULE — variables.tf
+# DYNAMODB MODULE — variables.tf  (Fase 2: añade replica_regions)
 # =============================================================================
 
 variable "table_name" {
-  description = "Name of the DynamoDB table"
+  description = "Nombre de la tabla DynamoDB"
   type        = string
 }
 
 variable "hash_key" {
-  description = "Attribute name to use as the partition (hash) key"
+  description = "Nombre del atributo a usar como partition (hash) key"
   type        = string
 }
 
 variable "range_key" {
-  description = "Attribute name to use as the sort (range) key. Omit if not needed."
+  description = "Nombre del atributo a usar como sort (range) key. Omitir si no se necesita."
   type        = string
   default     = null
 }
 
 variable "attributes" {
   description = <<-EOT
-    List of attribute definitions for the table.
-    Only key attributes (hash_key, range_key, and GSI/LSI keys) need to be declared here.
-    Type: S = String, N = Number, B = Binary
+    Lista de definiciones de atributos de la tabla.
+    Solo los atributos key (hash_key, range_key y claves de GSI/LSI) deben declararse aquí.
+    Tipo: S = String, N = Number, B = Binary
   EOT
   type = list(object({
     name = string
@@ -31,13 +31,24 @@ variable "attributes" {
 }
 
 variable "point_in_time_recovery_enabled" {
-  description = "Enable Point-in-Time Recovery (PITR). Incurs additional cost — keep false for dev/demo."
+  description = "Habilitar Point-in-Time Recovery (PITR). Añade coste — desactivado por defecto en dev/demo."
   type        = bool
   default     = false
 }
 
 variable "server_side_encryption_enabled" {
-  description = "Enable server-side encryption using AWS-owned KMS key (no extra cost)"
+  description = "Habilitar cifrado en reposo con KMS gestionado por AWS (sin coste extra)"
   type        = bool
   default     = true
+}
+
+variable "replica_regions" {
+  description = <<-EOT
+    Lista de regiones AWS donde desplegar réplicas de Global Table v2.
+    Ejemplo: ["eu-west-1"]
+    Lista vacía = tabla local sin réplicas (Fase 1).
+    IMPORTANTE: la tabla debe tener stream_enabled = true (activado en main.tf).
+  EOT
+  type        = list(string)
+  default     = []
 }

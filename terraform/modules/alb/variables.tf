@@ -1,106 +1,132 @@
 # =============================================================================
-# ALB MODULE — variables.tf
+# ALB MODULE — variables.tf  (Fase 2: añade internal, cross_zone y zonal_shift)
 # =============================================================================
 
 # ------- General -------
 variable "name" {
   type        = string
-  description = "Name for the ALB and derived resources (target group, listener)."
+  description = "Nombre para el ALB y recursos derivados (TG, listener)."
 }
 
 variable "tags_lb" {
   type        = map(string)
-  description = "Tags to apply to the Application Load Balancer resource."
+  description = "Tags a aplicar al recurso ALB."
   default     = {}
 }
 
 variable "tags_tg" {
   type        = map(string)
-  description = "Tags to apply to the Target Group resource."
+  description = "Tags a aplicar al Target Group."
   default     = {}
 }
 
 # ------- Network -------
 variable "vpc_id" {
   type        = string
-  description = "ID of the VPC where the Target Group will be created."
+  description = "ID del VPC donde se crea el Target Group."
 }
 
 variable "subnet_ids" {
   type        = list(string)
-  description = "List of public subnet IDs for the ALB (must span at least 2 AZs)."
+  description = "Lista de IDs de subnets para el ALB (mínimo 2 AZs)."
 }
 
 variable "security_group_ids" {
   type        = list(string)
-  description = "List of Security Group IDs to attach to the ALB."
+  description = "Lista de IDs de Security Groups a adjuntar al ALB."
 }
 
 # ------- ALB Settings -------
+variable "internal" {
+  type        = bool
+  description = <<-EOT
+    true  → ALB interno (no accesible desde internet) — usado para la capa App.
+    false → ALB público (internet-facing) — usado por los clientes finales.
+  EOT
+  default     = false
+}
+
 variable "drop_invalid_header_fields" {
   type        = bool
-  description = "Drop malformed HTTP header fields. Recommended true to prevent HTTP desync attacks."
+  description = "Descartar cabeceras HTTP malformadas. Recomendado true para prevenir ataques HTTP desync."
+  default     = true
+}
+
+variable "enable_cross_zone_load_balancing" {
+  type        = bool
+  description = <<-EOT
+    Habilita el balanceo de carga entre zonas.
+    CRÍTICO: Debe ser FALSE en el Internal ALB de la capa App para no romper
+    el experimento de Zonal Shift de la Fase 1 (el tráfico debe permanecer
+    confinado por zona antes de que ARC lo redirija).
+  EOT
+  default     = true
+}
+
+variable "enable_zonal_shift" {
+  type        = bool
+  description = "Habilita ARC Zonal Shift en el ALB. Solo tiene sentido en ALBs públicos (internet-facing)."
   default     = true
 }
 
 # ------- Target Group -------
 variable "tg_port" {
   type        = number
-  description = "Port on which targets (EC2 instances) receive traffic."
+  description = "Puerto en el que los targets (instancias EC2) reciben tráfico."
   default     = 80
 }
 
 variable "tg_protocol" {
   type        = string
-  description = "Protocol used to send traffic to targets (HTTP or HTTPS)."
+  description = "Protocolo para enviar tráfico a los targets (HTTP o HTTPS)."
   default     = "HTTP"
 }
 
 variable "tg_target_type" {
   type        = string
-  description = "Target type: 'instance' for EC2, 'ip' for ECS Fargate."
+  description = "Tipo de target: 'instance' para EC2 standalone, 'ip' para Fargate."
   default     = "instance"
 }
 
 variable "deregistration_delay" {
   type        = number
-  description = "Seconds the ALB waits before deregistering a draining target."
+  description = "Segundos que el ALB espera antes de deregistrar un target en drenado."
   default     = 30
 }
 
 # ------- Health Check -------
 variable "hc_path" {
   type        = string
-  description = "HTTP path the ALB uses for health checks. Points to the static file for a shallow (gray failure) check."
+  description = "Ruta HTTP que el ALB usa para los health checks."
   default     = "/health.html"
 }
 
 variable "hc_interval" {
   type        = number
-  description = "Seconds between consecutive health check requests."
+  description = "Segundos entre peticiones de health check consecutivas."
   default     = 15
 }
 
 variable "hc_timeout" {
   type        = number
-  description = "Seconds after which a health check is considered failed."
+  description = "Segundos tras los cuales un health check se considera fallido."
   default     = 5
 }
 
 variable "hc_healthy_threshold" {
   type        = number
-  description = "Consecutive successes required to mark a target healthy."
+  description = "Éxitos consecutivos necesarios para marcar un target como healthy."
   default     = 2
 }
 
 variable "hc_unhealthy_threshold" {
   type        = number
-  description = "Consecutive failures required to mark a target unhealthy."
+  description = "Fallos consecutivos necesarios para marcar un target como unhealthy."
   default     = 3
 }
 
 variable "hc_matcher" {
   type        = string
-  description = "HTTP status codes that indicate a healthy response."
+  description = "Códigos HTTP que indican una respuesta healthy."
   default     = "200-299"
 }

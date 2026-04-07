@@ -80,3 +80,15 @@ resource "aws_security_group_rule" "egress_sg" {
   protocol                 = each.value.rule.protocol
   source_security_group_id = each.value.sg
 }
+# =============================================================================
+# Required providers — permite que el root pase provider aliases (e.g. aws.ireland)
+# Ref: https://developer.hashicorp.com/terraform/language/modules/develop/providers
+# =============================================================================
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.31, < 7.0"
+    }
+  }
+}

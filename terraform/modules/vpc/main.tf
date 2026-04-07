@@ -141,3 +141,16 @@ resource "aws_route_table_association" "private" {
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private.id
 }
+
+# =============================================================================
+# Required providers — permite que el root pase provider aliases (e.g. aws.ireland)
+# Ref: https://developer.hashicorp.com/terraform/language/modules/develop/providers
+# =============================================================================
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.31, < 7.0"
+    }
+  }
+}
