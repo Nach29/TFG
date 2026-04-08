@@ -98,13 +98,13 @@ module "sg_web" {
   source = "./modules/security"
 
   name        = "${local.short_prefix}-web-sg"
-  description = "Web SG: solo acepta tráfico del ALB público"
+  description = "Web SG: solo acepta tráfico del ALB publico"
   vpc_id      = module.vpc.vpc_id
   tags        = { Name = "${local.short_prefix}-web-sg" }
 
   ingress_rules = [
     {
-      description     = "HTTP desde ALB público"
+      description     = "HTTP desde ALB publico"
       from_port       = var.web_port
       to_port         = var.web_port
       protocol        = "tcp"
@@ -409,13 +409,13 @@ module "sg_web_ireland" {
   providers = { aws = aws.ireland }
 
   name        = "${local.short_prefix}-web-sg-ie"
-  description = "Web SG Irlanda: solo acepta tráfico del ALB público"
+  description = "Web SG Irlanda: solo acepta tráfico del ALB publico"
   vpc_id      = module.vpc_ireland.vpc_id
   tags        = { Name = "${local.short_prefix}-web-sg-ie" }
 
   ingress_rules = [
     {
-      description     = "HTTP desde ALB público Irlanda"
+      description     = "HTTP desde ALB publico Irlanda"
       from_port       = var.web_port
       to_port         = var.web_port
       protocol        = "tcp"
@@ -718,7 +718,7 @@ module "arc_validation_lambda" {
   name_prefix         = var.project_prefix
   dynamodb_table_name = var.dynamodb_table_name
   target_region       = var.dr_region
-  max_latency_ms      = 2000
+  max_latency_ms      = local.dr_validation_max_latency_ms
   log_retention_days  = 14
   account_id          = data.aws_caller_identity.current.account_id
 }
@@ -828,13 +828,29 @@ resource "aws_arcregionswitch_plan" "main_dr_plan" {
 
     # ── Paso 1: Escalar App + Web ASG de Irlanda a capacidad de producción ──────
     step {
-      name                 = "scale-up-ireland-asg"
+      name                 = "scale-up-ireland-app-asg"
       execution_block_type = "EC2AutoScaling"
 
       ec2_asg_capacity_increase_config {
         # Escala el ASG de App (el más crítico — donde está la lógica de negocio)
         asg {
           arn = module.app_asg_ireland.autoscaling_group_arn
+        }
+        # target_percent: incremento porcentual relativo a la capacidad de Frankfurt
+        # 300% de 1 (standby) = 3 instancias → igual que la región activa
+        target_percent               = 300
+        capacity_monitoring_approach = "sampledMaxInLast24Hours"
+      }
+    }
+
+    step {
+      name                 = "scale-up-ireland-web-asg"
+      execution_block_type = "EC2AutoScaling"
+
+      ec2_asg_capacity_increase_config {
+        # Escala el ASG de App (el más crítico — donde está la lógica de negocio)
+        asg {
+          arn = module.web_asg_ireland.autoscaling_group_arn
         }
         # target_percent: incremento porcentual relativo a la capacidad de Frankfurt
         # 300% de 1 (standby) = 3 instancias → igual que la región activa
