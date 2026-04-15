@@ -1,10 +1,8 @@
 # =============================================================================
-# PROVIDERS
+# Providers
 #
-# Fase 2: Se añade un provider alias para eu-west-1 (Irlanda) para gestionar
-# la infraestructura de Warm Standby y el ARC Region Switch Plan.
-# La versión mínima del provider se actualiza a ~> 5.90 para incluir soporte
-# nativo de aws_arcregionswitch_plan (disponible desde ~Feb 2026).
+# AWS provider v6 is required because the project uses the native
+# aws_arcregionswitch_plan resource.
 # =============================================================================
 
 terraform {
@@ -13,7 +11,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 6.38" # v6 requerido para aws_arcregionswitch_plan nativo (ARC Region Switch)
+      version = "~> 6.38"
     }
     archive = {
       source  = "hashicorp/archive"
@@ -22,13 +20,10 @@ terraform {
   }
 }
 
-# ── Provider Principal: eu-central-1 (Fráncfort — Región Activa) ──────────────
+# Frankfurt is the active region.
 provider "aws" {
   region = var.aws_region
 
-  # default_tags se fusionan automáticamente en todos los recursos gestionados
-  # por este provider, eliminando la necesidad de repetirlos en cada módulo.
-  # Ref: https://registry.terraform.io/providers/hashicorp/aws/latest/docs#default_tags
   default_tags {
     tags = {
       Project   = "TFG"
@@ -39,9 +34,7 @@ provider "aws" {
   }
 }
 
-# ── Provider Alias: eu-west-1 (Irlanda — Warm Standby / DR) ──────────────────
-# Todos los recursos de Irlanda deben incluir: provider = aws.ireland
-# El alias hereda el mismo conjunto de default_tags para consistencia.
+# Ireland is the warm standby region.
 provider "aws" {
   alias  = "ireland"
   region = var.dr_region

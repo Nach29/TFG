@@ -1,10 +1,10 @@
 # =============================================================================
-# ROOT OUTPUTS — Fase 2
+# Root outputs
 # =============================================================================
 
-# ── VPC ───────────────────────────────────────────────────────────────────────
+# Networking
 output "vpc_id_frankfurt" {
-  description = "ID del VPC de Fráncfort (región activa)"
+  description = "ID del VPC de Frankfurt (region activa)"
   value       = module.vpc.vpc_id
 }
 
@@ -13,25 +13,25 @@ output "vpc_id_ireland" {
   value       = module.vpc_ireland.vpc_id
 }
 
-# ── ALBs Públicos ─────────────────────────────────────────────────────────────
+# Public ALBs
 output "alb_dns_name_frankfurt" {
-  description = "DNS del ALB público de Fráncfort — endpoint de producción"
+  description = "DNS del ALB publico de Frankfurt"
   value       = module.alb.alb_dns_name
 }
 
 output "alb_dns_name_ireland" {
-  description = "DNS del ALB público de Irlanda — endpoint de failover"
+  description = "DNS del ALB publico de Irlanda"
   value       = module.alb_ireland.alb_dns_name
 }
 
 output "alb_arn_frankfurt" {
-  description = "ARN del ALB de Fráncfort (para ARC Zonal Shift y CloudWatch)"
+  description = "ARN del ALB publico de Frankfurt"
   value       = module.alb.alb_arn
 }
 
-# ── Internal ALBs ─────────────────────────────────────────────────────────────
+# Internal ALBs
 output "internal_alb_dns_frankfurt" {
-  description = "DNS del Internal ALB de Fráncfort (apuntado por el user_data de la capa Web)"
+  description = "DNS del Internal ALB de Frankfurt"
   value       = module.internal_alb.alb_dns_name
 }
 
@@ -40,72 +40,67 @@ output "internal_alb_dns_ireland" {
   value       = module.internal_alb_ireland.alb_dns_name
 }
 
-# ── ASG ───────────────────────────────────────────────────────────────────────
+# Auto Scaling Groups
 output "web_asg_name_frankfurt" {
-  description = "Nombre del ASG Web de Fráncfort"
+  description = "Nombre del ASG Web de Frankfurt"
   value       = module.web_asg.autoscaling_group_name
 }
 
 output "app_asg_name_frankfurt" {
-  description = "Nombre del ASG App de Fráncfort"
+  description = "Nombre del ASG App de Frankfurt"
   value       = module.app_asg.autoscaling_group_name
 }
 
 output "web_asg_arn_ireland" {
-  description = "ARN del ASG Web de Irlanda — referenciado en el ARC Region Switch Plan"
+  description = "ARN del ASG Web de Irlanda"
   value       = module.web_asg_ireland.autoscaling_group_arn
 }
 
 output "app_asg_arn_ireland" {
-  description = "ARN del ASG App de Irlanda — referenciado en el Paso 1 del ARC Plan"
+  description = "ARN del ASG App de Irlanda"
   value       = module.app_asg_ireland.autoscaling_group_arn
 }
 
-# ── DynamoDB ──────────────────────────────────────────────────────────────────
+# DynamoDB
 output "dynamodb_table_name" {
-  description = "Nombre de la DynamoDB Global Table de sesiones"
+  description = "Nombre de la DynamoDB Global Table"
   value       = module.dynamodb.table_name
 }
 
 output "dynamodb_table_arn" {
-  description = "ARN de la DynamoDB Global Table (región primaria eu-central-1)"
+  description = "ARN de la DynamoDB Global Table en la region primaria"
   value       = module.dynamodb.table_arn
 }
 
-# ── Route 53 ──────────────────────────────────────────────────────────────────
+# Route 53
 output "domain_name" {
-  description = "Nombre de dominio del servicio — apunta via Route53 Failover al ALB activo"
+  description = "URL del servicio publicada mediante Route 53 failover"
   value       = "http://${var.domain_name}"
 }
 
 output "route53_health_check_id" {
-  description = "ID del Route53 Health Check de Fráncfort — referenciado en el ARC Region Switch Plan"
+  description = "ID del health check de Frankfurt usado por Route 53"
   value       = aws_route53_health_check.frankfurt_alb.id
 }
 
-# ── ARC ───────────────────────────────────────────────────────────────────────
+# ARC
 output "arc_dr_plan_name" {
   description = "Nombre del ARC Region Switch Plan"
   value       = aws_arcregionswitch_plan.main_dr_plan.name
 }
 
 output "arc_dr_plan_arn" {
-  description = "ARN del ARC Region Switch Plan — para ejecutarlo desde la consola o CLI"
+  description = "ARN del ARC Region Switch Plan"
   value       = aws_arcregionswitch_plan.main_dr_plan.arn
 }
 
-output "arc_validation_lambda_arn" {
-  description = "ARN de la Lambda de validación DynamoDB del ARC Plan (Paso 2)"
-  value       = module.arc_validation_lambda.lambda_arn
-}
-
-# ── IAM ───────────────────────────────────────────────────────────────────────
+# IAM
 output "web_iam_instance_profile_frankfurt" {
-  description = "Nombre del IAM Instance Profile Web de Fráncfort (SSM only)"
+  description = "Nombre del instance profile Web de Frankfurt"
   value       = module.iam_web.instance_profile_name
 }
 
 output "app_iam_instance_profile_frankfurt" {
-  description = "Nombre del IAM Instance Profile App de Fráncfort (SSM + DynamoDB)"
+  description = "Nombre del instance profile App de Frankfurt"
   value       = module.iam_app.instance_profile_name
 }

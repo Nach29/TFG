@@ -1,43 +1,30 @@
 # =============================================================================
-# ROOT MAIN.TF — Fase 2: Warm Standby DR + ARC Region Switch Plan
+# Root module
 #
-# Arquitectura completa:
+# This module deploys the full TFG platform:
+#   - Frankfurt as the active region
+#   - Ireland as the warm standby region
+#   - Route 53 failover routing between both public ALBs
+#   - ARC Zonal Shift automation for zonal incidents
+#   - ARC Region Switch orchestration for regional failover
 #
-#   FRÁNCFORT (eu-central-1) — REGIÓN ACTIVA:
-#     Internet → ALB Público (3 AZs, Zonal Shift ON)
-#             → Web ASG (desired=3, 1/AZ, subnets privadas)
-#             → Internal ALB (cross_zone=false, para preservar Zonal Shift)
-#             → App ASG (desired=3, 1/AZ, subnets privadas)
-#             → DynamoDB Global Table (Activo-Activo con Irlanda)
+# Request path:
+#   Internet -> Public ALB -> Web ASG -> Internal ALB -> App ASG -> DynamoDB
 #
-#   IRLANDA (eu-west-1) — WARM STANDBY:
-#     Internet → ALB Público Irlanda (3 AZs, Zonal Shift ON)
-#             → Web ASG (desired=1, warm standby)
-#             → Internal ALB Irlanda (cross_zone=false)
-#             → App ASG (desired=1, warm standby)
-#             → DynamoDB Global Table (réplica síncrona)
-#
-#   ROUTE 53 (Global):
-#     dontpushthis.link → PRIMARY: ALB Fráncfort (con health check)
-#                       → SECONDARY: ALB Irlanda (failover automático)
-#
-#   ARC REGION SWITCH PLAN:
-#     Paso 1: Escalar App ASG Irlanda 1→3
-#     Paso 2: Validar ReplicationLatency DynamoDB < 2000ms (Lambda)
-#     Paso 3: Forzar failover Route53 via Health Check manipulation
-#
-# Naming: tfg-student-icolasma-TFG-[recurso]
-# Tags: via provider default_tags (Project/Owner/ManagedBy/Phase)
+# Non-negotiable design constraints:
+#   - Internal ALB cross-zone load balancing stays disabled
+#   - EC2 access is only through SSM Session Manager
+#   - Cost optimization uses t3.micro and one NAT Gateway per region
 # =============================================================================
 
 locals {
-  # AMI principal (Fráncfort): var.ami_id si se especifica, si no el último AL2023
+  # Frankfurt AMI: use a pinned AMI only when var.ami_id is provided.
   ami_id = var.ami_id != null ? var.ami_id : data.aws_ssm_parameter.amazon_linux_2023.value
 
-  # AMI de Irlanda — siempre desde SSM (las AMIs son distintas por región)
+  # Ireland AMIs are regional, so the DR region resolves its own AL2023 AMI.
   ami_id_ireland = data.aws_ssm_parameter.amazon_linux_2023_ireland.value
 
-  # Prefijo corto para nombres que tienen límite de caracteres (ALB: 32 chars)
+  # AWS ALB names are short, so keep a compact prefix available for those resources.
   short_prefix = "tfg-icolasma"
 }
 
@@ -399,7 +386,7 @@ module "sg_alb_ireland" {
   tags        = { Name = "${local.short_prefix}-alb-sg-ie" }
 
   ingress_rules = [
-    { description = "HTTP",  from_port = 80,  to_port = 80,  protocol = "tcp", cidr_blocks = ["0.0.0.0/0"] },
+    { description = "HTTP", from_port = 80, to_port = 80, protocol = "tcp", cidr_blocks = ["0.0.0.0/0"] },
     { description = "HTTPS", from_port = 443, to_port = 443, protocol = "tcp", cidr_blocks = ["0.0.0.0/0"] }
   ]
 }
@@ -703,33 +690,16 @@ resource "aws_route53_record" "secondary" {
     evaluate_target_health = true
   }
 }
+# =============================================================================
+# ARC REGION SWITCH PLAN
+# =============================================================================
 
 # =============================================================================
-# ████████████████████  ARC REGION SWITCH PLAN  ███████████████████████████████
-# =============================================================================
-
-# =============================================================================
-# 20. LAMBDA DE VALIDACIÓN (Paso 2 del workflow)
-# Consulta CloudWatch para verificar ReplicationLatency < 2000ms
-# =============================================================================
-module "arc_validation_lambda" {
-  source = "./modules/arc_validation_lambda"
-
-  name_prefix         = var.project_prefix
-  dynamodb_table_name = var.dynamodb_table_name
-  target_region       = var.dr_region
-  max_latency_ms      = 2000
-  log_retention_days  = 14
-  account_id          = data.aws_caller_identity.current.account_id
-}
-
-# =============================================================================
-# 21. IAM ROLE — Execution Role del ARC Region Switch Plan
+# 20. IAM ROLE - Execution Role del ARC Region Switch Plan
 #
 # El plan ARC necesita un rol con permisos para ejecutar los pasos del workflow:
-#   - autoscaling:UpdateAutoScalingGroup  → Paso 1 (escalar ASG Irlanda)
-#   - lambda:InvokeFunction               → Paso 2 (invocar Lambda validación)
-#   - route53:UpdateHealthCheck           → Paso 3 (manipular health check)
+#   - autoscaling:UpdateAutoScalingGroup -> Paso 1 (escalar ASGs Irlanda)
+#   - route53:UpdateHealthCheck         -> Paso 2 (manipular health check)
 # =============================================================================
 data "aws_iam_policy_document" "arc_plan_assume_role" {
   statement {
@@ -752,7 +722,7 @@ resource "aws_iam_role" "arc_execution_role" {
 }
 
 data "aws_iam_policy_document" "arc_plan_permissions" {
-  # Paso 1: escalar el ASG de App en Irlanda de 1 → 3
+  # Paso 1: escalar los ASGs de Irlanda a capacidad de produccion
   statement {
     sid    = "AllowASGScaleUp"
     effect = "Allow"
@@ -766,15 +736,7 @@ data "aws_iam_policy_document" "arc_plan_permissions" {
     ]
   }
 
-  # Paso 2: invocar la Lambda de validación
-  statement {
-    sid    = "AllowLambdaValidationInvoke"
-    effect = "Allow"
-    actions = ["lambda:InvokeFunction"]
-    resources = [module.arc_validation_lambda.lambda_arn]
-  }
-
-  # Paso 3: manipular el health check para forzar el failover Route 53
+  # Paso 2: manipular el health check para forzar el failover Route 53
   statement {
     sid    = "AllowRoute53HealthCheckUpdate"
     effect = "Allow"
@@ -795,72 +757,38 @@ resource "aws_iam_role_policy" "arc_plan_permissions" {
 }
 
 # =============================================================================
-# 22. ARC REGION SWITCH PLAN — Core del TFG Fase 2
+# 21. ARC REGION SWITCH PLAN - Core del TFG Fase 2
 #
-# recovery_approach = "activePassive":
-#   Frankfurt es la región activa; Irlanda es el standby.
-#   El plan se ejecuta cuando el operador decide hacer el switch
-#   (ya sea manualmente o por automatización).
-#
-# Workflow — 3 pasos en secuencia:
-#   Paso 1: ec2_asg_capacity_increase_config
-#     → Escala el ASG de App de Irlanda de 1 a 3 instancias ANTES de desviar tráfico.
-#     → Garantiza que el standby pueda absorber la carga de producción.
-#
-#   Paso 2: custom_action_lambda_config
-#     → Invoca la Lambda de validación que comprueba ReplicationLatency.
-#     → Si la latencia > 2000ms, el plan se para para evitar pérdida de datos.
-#
-#   Paso 3: route53_health_check_config
-#     → Manipula el health check de Fráncfort para que Route 53 active el SECONDARY.
-#     → Este es el momento efectivo del failover de tráfico.
+# Workflow - 2 pasos en secuencia:
+#   Paso 1: escalar los ASGs de Irlanda antes de desviar trafico.
+#   Paso 2: forzar failover de trafico via Route 53 Health Check.
 # =============================================================================
 resource "aws_arcregionswitch_plan" "main_dr_plan" {
   name              = "${var.project_prefix}-dr-plan"
   execution_role    = aws_iam_role.arc_execution_role.arn
   recovery_approach = "activePassive"
 
-  # Regiones que participan: [activa, standby]
   regions = [var.aws_region, var.dr_region]
 
   workflow {
     workflow_target_action = "activate"
 
-    # ── Paso 1: Escalar App + Web ASG de Irlanda a capacidad de producción ──────
+    # Paso 1: Escalar ASGs de Irlanda a capacidad de produccion
     step {
       name                 = "scale-up-ireland-asg"
       execution_block_type = "EC2AutoScaling"
 
       ec2_asg_capacity_increase_config {
-        # Escala el ASG de App (el más crítico — donde está la lógica de negocio)
         asg {
           arn = module.app_asg_ireland.autoscaling_group_arn
         }
-        # target_percent: incremento porcentual relativo a la capacidad de Frankfurt
-        # 300% de 1 (standby) = 3 instancias → igual que la región activa
+
         target_percent               = 300
         capacity_monitoring_approach = "sampledMaxInLast24Hours"
       }
     }
 
-    # ── Paso 2: Validar replicación DynamoDB antes del desvío de tráfico ────────
-    step {
-      name                 = "validate-dynamodb-replication"
-      execution_block_type = "CustomActionLambda"
-
-      custom_action_lambda_config {
-        # "activatingRegion": la Lambda se ejecuta en la región que recibe tráfico
-        region_to_run          = "activatingRegion"
-        retry_interval_minutes = 2
-        timeout_minutes        = 10
-
-        lambda {
-          arn = module.arc_validation_lambda.lambda_arn
-        }
-      }
-    }
-
-    # ── Paso 3: Forzar failover de tráfico via Route 53 Health Check ─────────────
+    # Paso 2: Forzar failover de trafico via Route 53 Health Check
     step {
       name                 = "failover-route53-traffic"
       execution_block_type = "Route53HealthCheck"
@@ -878,7 +806,6 @@ resource "aws_arcregionswitch_plan" "main_dr_plan" {
 
   depends_on = [
     aws_iam_role_policy.arc_plan_permissions,
-    module.arc_validation_lambda,
     module.app_asg_ireland,
     module.web_asg_ireland,
     aws_route53_health_check.frankfurt_alb,
