@@ -80,3 +80,9 @@ variable "additional_tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "common_tags" {
+  description = "Tags comunes que deben propagarse explicitamente a instancias y volumenes del ASG"
+  type        = map(string)
+  default     = {}
+}

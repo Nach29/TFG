@@ -61,6 +61,7 @@ resource "aws_launch_template" "this" {
   tag_specifications {
     resource_type = "instance"
     tags = merge(
+      var.common_tags,
       { Name = var.name_prefix },
       var.additional_tags
     )
@@ -69,12 +70,14 @@ resource "aws_launch_template" "this" {
   tag_specifications {
     resource_type = "volume"
     tags = merge(
+      var.common_tags,
       { Name = "${var.name_prefix}-vol" },
       var.additional_tags
     )
   }
 
   tags = merge(
+    var.common_tags,
     { Name = "${var.name_prefix}-lt" },
     var.additional_tags
   )
@@ -123,6 +126,15 @@ resource "aws_autoscaling_group" "this" {
     key                 = "Name"
     value               = var.name_prefix
     propagate_at_launch = true
+  }
+
+  dynamic "tag" {
+    for_each = var.common_tags
+    content {
+      key                 = tag.key
+      value               = tag.value
+      propagate_at_launch = true
+    }
   }
 
   dynamic "tag" {

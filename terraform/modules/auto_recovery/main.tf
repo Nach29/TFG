@@ -22,7 +22,7 @@
 data "archive_file" "lambda_zip" {
   type        = "zip"
   source_file = "${path.module}/lambda_src/zonal_shift_handler.py"
-  output_path = "${path.module}/lambda_src/zonal_shift_handler.zip"
+  output_path = "${path.root}/${var.project_prefix}-auto-recovery.zip"
 }
 
 # ---------------------------------------------------------------------------
@@ -156,8 +156,6 @@ resource "aws_lambda_function" "zonal_shift" {
 #    alarm ARNs are unknown at plan time (they contain the alarm name hash).
 # ---------------------------------------------------------------------------
 data "aws_caller_identity" "current" {}
-data "aws_region" "current" {}
-
 resource "aws_lambda_permission" "allow_cloudwatch_alarms" {
   statement_id  = "AllowCloudWatchAlarmsInvoke"
   action        = "lambda:InvokeFunction"

@@ -29,7 +29,6 @@ provider "aws" {
       Project   = "TFG"
       Owner     = "student-icolasma"
       ManagedBy = "Terraform"
-      Phase     = "2-DR"
     }
   }
 }
@@ -44,7 +43,6 @@ provider "aws" {
       Project   = "TFG"
       Owner     = "student-icolasma"
       ManagedBy = "Terraform"
-      Phase     = "2-DR"
       Role      = "WarmStandby"
     }
   }

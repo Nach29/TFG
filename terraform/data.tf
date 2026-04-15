@@ -21,6 +21,3 @@ data "aws_route53_zone" "main" {
 
 # Current AWS account, used in IAM policies and ARNs.
 data "aws_caller_identity" "current" {}
-
-# Current region for contextual lookups when needed.
-data "aws_region" "current" {}

@@ -26,6 +26,19 @@ locals {
 
   # AWS ALB names are short, so keep a compact prefix available for those resources.
   short_prefix = "tfg-icolasma"
+
+  # ASG-launched EC2 instances and EBS volumes need explicit tag propagation.
+  common_tags = {
+    Project   = "TFG"
+    TFG       = "true"
+    Owner     = "student-icolasma"
+    ManagedBy = "Terraform"
+    Phase     = "2-DR"
+  }
+
+  ireland_common_tags = merge(local.common_tags, {
+    Role = "WarmStandby"
+  })
 }
 
 # =============================================================================
@@ -759,9 +772,10 @@ resource "aws_iam_role_policy" "arc_plan_permissions" {
 # =============================================================================
 # 21. ARC REGION SWITCH PLAN - Core del TFG Fase 2
 #
-# Workflow - 2 pasos en secuencia:
-#   Paso 1: escalar los ASGs de Irlanda antes de desviar trafico.
-#   Paso 2: forzar failover de trafico via Route 53 Health Check.
+# Workflow - 3 pasos en secuencia:
+#   Paso 1: escalar el ASG App de Irlanda antes de desviar trafico.
+#   Paso 2: escalar el ASG Web de Irlanda antes de desviar trafico.
+#   Paso 3: forzar failover de trafico via Route 53 Health Check.
 # =============================================================================
 resource "aws_arcregionswitch_plan" "main_dr_plan" {
   name              = "${var.project_prefix}-dr-plan"
@@ -773,7 +787,7 @@ resource "aws_arcregionswitch_plan" "main_dr_plan" {
   workflow {
     workflow_target_action = "activate"
 
-    # Paso 1: Escalar ASGs de Irlanda a capacidad de produccion
+    # Paso 1: Escalar el ASG App de Irlanda a capacidad de produccion
     step {
       name                 = "scale-up-ireland-app-asg"
       execution_block_type = "EC2AutoScaling"
@@ -788,7 +802,22 @@ resource "aws_arcregionswitch_plan" "main_dr_plan" {
       }
     }
 
-    # Paso 2: Forzar failover de trafico via Route 53 Health Check
+    # Paso 2: Escalar el ASG Web de Irlanda a capacidad de produccion
+    step {
+      name                 = "scale-up-ireland-web-asg"
+      execution_block_type = "EC2AutoScaling"
+
+      ec2_asg_capacity_increase_config {
+        asg {
+          arn = module.web_asg_ireland.autoscaling_group_arn
+        }
+
+        target_percent               = 300
+        capacity_monitoring_approach = "sampledMaxInLast24Hours"
+      }
+    }
+
+    # Paso 3: Forzar failover de trafico via Route 53 Health Check
     step {
       name                 = "failover-route53-traffic"
       execution_block_type = "Route53HealthCheck"
