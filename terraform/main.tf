@@ -85,13 +85,13 @@ module "sg_web" {
   source = "./modules/security"
 
   name        = "${local.short_prefix}-web-sg"
-  description = "Web SG: solo acepta tráfico del ALB público"
+  description = "Web SG: solo acepta tráfico del ALB publico"
   vpc_id      = module.vpc.vpc_id
   tags        = { Name = "${local.short_prefix}-web-sg" }
 
   ingress_rules = [
     {
-      description     = "HTTP desde ALB público"
+      description     = "HTTP desde ALB publico"
       from_port       = var.web_port
       to_port         = var.web_port
       protocol        = "tcp"
@@ -396,13 +396,13 @@ module "sg_web_ireland" {
   providers = { aws = aws.ireland }
 
   name        = "${local.short_prefix}-web-sg-ie"
-  description = "Web SG Irlanda: solo acepta tráfico del ALB público"
+  description = "Web SG Irlanda: solo acepta tráfico del ALB publico"
   vpc_id      = module.vpc_ireland.vpc_id
   tags        = { Name = "${local.short_prefix}-web-sg-ie" }
 
   ingress_rules = [
     {
-      description     = "HTTP desde ALB público Irlanda"
+      description     = "HTTP desde ALB publico Irlanda"
       from_port       = var.web_port
       to_port         = var.web_port
       protocol        = "tcp"
@@ -775,7 +775,7 @@ resource "aws_arcregionswitch_plan" "main_dr_plan" {
 
     # Paso 1: Escalar ASGs de Irlanda a capacidad de produccion
     step {
-      name                 = "scale-up-ireland-asg"
+      name                 = "scale-up-ireland-app-asg"
       execution_block_type = "EC2AutoScaling"
 
       ec2_asg_capacity_increase_config {
@@ -811,3 +811,4 @@ resource "aws_arcregionswitch_plan" "main_dr_plan" {
     aws_route53_health_check.frankfurt_alb,
   ]
 }
+
