@@ -65,8 +65,8 @@ resource "aws_lb_target_group" "ecs_tg" {
 # ------- Listener HTTP:80 → forward al Target Group -------
 resource "aws_lb_listener" "http_forward" {
   load_balancer_arn = aws_lb.main_alb.arn
-  port              = "80"
-  protocol          = "HTTP"
+  port              = var.tg_port
+  protocol          = var.tg_protocol
 
   default_action {
     type             = "forward"

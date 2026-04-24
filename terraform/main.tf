@@ -783,6 +783,7 @@ resource "aws_arcregionswitch_plan" "main_dr_plan" {
   recovery_approach = "activePassive"
 
   regions = [var.aws_region, var.dr_region]
+  primary_region = var.aws_region
 
   workflow {
     workflow_target_action = "activate"
@@ -803,6 +804,7 @@ resource "aws_arcregionswitch_plan" "main_dr_plan" {
 
         target_percent               = 300
         capacity_monitoring_approach = "sampledMaxInLast24Hours"
+        timeout_minutes              = 60
       }
     }
 
@@ -822,6 +824,7 @@ resource "aws_arcregionswitch_plan" "main_dr_plan" {
 
         target_percent               = 300
         capacity_monitoring_approach = "sampledMaxInLast24Hours"
+        timeout_minutes              = 60
       }
     }
 
@@ -833,6 +836,7 @@ resource "aws_arcregionswitch_plan" "main_dr_plan" {
       route53_health_check_config {
         hosted_zone_id = data.aws_route53_zone.main.zone_id
         record_name    = var.domain_name
+        timeout_minutes              = 60
       }
     }
   }
