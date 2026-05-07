@@ -48,10 +48,11 @@ Puntos importantes del experimento:
 El recurso `aws_arcregionswitch_plan` modela un failover activo-pasivo entre Frankfurt e Irlanda.
 
 Workflow actual del plan:
-1. Escalar los ASG de Irlanda a capacidad de produccion.
-2. Forzar el failover DNS mediante el health check de Route 53.
+1. Escalar el ASG de la capa App en Irlanda a capacidad de produccion.
+2. Escalar el ASG de la capa Web en Irlanda a capacidad de produccion.
+3. Forzar el failover DNS mediante el health check de Route 53.
 
-La validacion intermedia de DynamoDB se eliminó para reducir complejidad del TFG y dejar la demo mas directa.
+La validacion intermedia de DynamoDB se elimino para reducir complejidad del TFG y dejar la demo mas directa.
 
 ## Restricciones de diseno
 
@@ -116,10 +117,11 @@ La documentacion mas cercana al despliegue esta en:
 
 Tras la limpieza actual:
 - Se ha retirado el modulo obsoleto de validacion ARC que ya no se usa.
-- El `root` Terraform refleja el workflow real de 2 pasos del Region Switch Plan.
+- El `root` Terraform refleja el workflow real de 3 pasos del Region Switch Plan.
 - La documentacion se ha alineado con la arquitectura activa del repositorio.
 
 ## Autor
 
 Ignacio Colas Martin
 Trabajo de Fin de Grado - 2026
+
