@@ -633,22 +633,19 @@ module "web_asg_ireland" {
 # =============================================================================
 
 # =============================================================================
-# 17. ROUTE 53 HEALTH CHECK
-# Monitoriza el endpoint publico de Francfort (/health.html).
-# Si falla, Route 53 activa el registro SECONDARY (Irlanda) automaticamente.
-# Nota: El ARC Region Switch Plan del Paso 3 puede manipular este health check
-# para forzar el failover proactivamente (antes de que realmente falle).
+# 17. ROUTE 53 HEALTH CHECK - Frankfurt
+# Monitoriza el ALB publico de Frankfurt.
+# Este health check se asocia al registro PRIMARY.
 # =============================================================================
 resource "aws_route53_health_check" "frankfurt_alb" {
-  # Direccion del ALB de Francfort   el DNS name resuelve a IPs en las 3 AZs
   fqdn              = module.alb.alb_dns_name
   port              = 80
   type              = "HTTP"
   resource_path     = var.alb_health_check_path
-  failure_threshold = 3  # fallos consecutivos antes de declarar unhealthy
-  request_interval  = 30 # segundos entre checks
+  failure_threshold = 3
+  request_interval  = 30
 
-  # Regiones de Route 53 que realizan el health check (multi-region para precision)
+  # Route 53 exige al menos 3 regiones si se define este campo.
   regions = ["eu-west-1", "us-east-1", "ap-southeast-1"]
 
   tags = {
@@ -657,34 +654,38 @@ resource "aws_route53_health_check" "frankfurt_alb" {
 }
 
 # =============================================================================
-# 18. REGISTRO DNS PRIMARY   Francfort (con health check asociado)
-# Tipo ALIAS apunta al ALB de Francfort.
-# Route 53 solo rutara aqui si el health check esta healthy.
+# 18. REGISTRO DNS PRIMARY - Frankfurt
+# IMPORTANTE:
+#   - set_identifier contiene la region exacta para que ARC Region Switch pueda
+#     mapear este record set con eu-central-1.
+#   - evaluate_target_health = false porque usamos health_check_id explicito.
 # =============================================================================
 resource "aws_route53_record" "primary" {
   zone_id = data.aws_route53_zone.main.zone_id
   name    = var.domain_name
   type    = "A"
 
-  # Failover routing policy
   failover_routing_policy {
     type = "PRIMARY"
   }
 
-  set_identifier  = "frankfurt-primary"
+  set_identifier  = var.aws_region
   health_check_id = aws_route53_health_check.frankfurt_alb.id
 
   alias {
     name                   = module.alb.alb_dns_name
     zone_id                = module.alb.alb_zone_id
-    evaluate_target_health = true
+    evaluate_target_health = false
   }
 }
 
 # =============================================================================
-# 19. REGISTRO DNS SECONDARY   Irlanda (failover automatico)
-# Si el health check de Francfort falla, todo el trafico va a Irlanda.
-# No tiene health check asociado (el SECONDARY nunca necesita health check).
+# 19. REGISTRO DNS SECONDARY - Irlanda
+# IMPORTANTE:
+#   - set_identifier contiene la region exacta para que ARC Region Switch pueda
+#     mapear este record set con eu-west-1.
+#   - El SECONDARY puede no tener health_check_id si solo quieres failover
+#     Route 53 clasico. Para Region Switch, revisa la nota de abajo.
 # =============================================================================
 resource "aws_route53_record" "secondary" {
   zone_id = data.aws_route53_zone.main.zone_id
@@ -695,24 +696,21 @@ resource "aws_route53_record" "secondary" {
     type = "SECONDARY"
   }
 
-  set_identifier = "ireland-secondary"
+  set_identifier = var.dr_region
 
   alias {
     name                   = module.alb_ireland.alb_dns_name
     zone_id                = module.alb_ireland.alb_zone_id
-    evaluate_target_health = true
+    evaluate_target_health = false
   }
 }
+
 # =============================================================================
 # ARC REGION SWITCH PLAN
 # =============================================================================
 
 # =============================================================================
 # 20. IAM ROLE - Execution Role del ARC Region Switch Plan
-#
-# El plan ARC necesita un rol con permisos para ejecutar los pasos del workflow:
-#   - autoscaling:UpdateAutoScalingGroup -> Paso 1 (escalar ASGs Irlanda)
-#   - route53:UpdateHealthCheck         -> Paso 2 (manipular health check)
 # =============================================================================
 data "aws_iam_policy_document" "arc_plan_assume_role" {
   statement {
@@ -735,31 +733,70 @@ resource "aws_iam_role" "arc_execution_role" {
 }
 
 data "aws_iam_policy_document" "arc_plan_permissions" {
-  # Paso 1: escalar los ASGs de Irlanda a capacidad de produccion
+  statement {
+    sid    = "AllowASGRead"
+    effect = "Allow"
+    actions = [
+      "autoscaling:DescribeAutoScalingGroups"
+    ]
+    resources = ["*"]
+  }
+
   statement {
     sid    = "AllowASGScaleUp"
     effect = "Allow"
     actions = [
-      "autoscaling:UpdateAutoScalingGroup",
-      "autoscaling:DescribeAutoScalingGroups",
+      "autoscaling:UpdateAutoScalingGroup"
     ]
     resources = [
       module.app_asg_ireland.autoscaling_group_arn,
-      module.web_asg_ireland.autoscaling_group_arn,
+      module.web_asg_ireland.autoscaling_group_arn
     ]
   }
 
-  # Paso 2: manipular el health check para forzar el failover Route 53
   statement {
     sid    = "AllowRoute53HealthCheckUpdate"
     effect = "Allow"
     actions = [
       "route53:UpdateHealthCheck",
-      "route53:GetHealthCheck",
+      "route53:GetHealthCheck"
     ]
     resources = [
       "arn:aws:route53:::healthcheck/${aws_route53_health_check.frankfurt_alb.id}"
     ]
+  }
+
+  statement {
+    sid    = "AllowRoute53ListRecords"
+    effect = "Allow"
+    actions = [
+      "route53:ListResourceRecordSets"
+    ]
+    resources = [
+      "arn:aws:route53:::hostedzone/${data.aws_route53_zone.main.zone_id}"
+    ]
+  }
+
+  statement {
+    sid    = "AllowARCValidation"
+    effect = "Allow"
+    actions = [
+      "iam:SimulatePrincipalPolicy"
+    ]
+    resources = [
+      aws_iam_role.arc_execution_role.arn
+    ]
+  }
+
+  statement {
+    sid    = "AllowARCReadPlan"
+    effect = "Allow"
+    actions = [
+      "arc-region-switch:GetPlan",
+      "arc-region-switch:GetPlanExecution",
+      "arc-region-switch:ListPlanExecutions"
+    ]
+    resources = ["*"]
   }
 }
 
@@ -772,23 +809,22 @@ resource "aws_iam_role_policy" "arc_plan_permissions" {
 # =============================================================================
 # 21. ARC REGION SWITCH PLAN - Core del TFG Fase 2
 #
-# Workflow - 3 pasos en secuencia:
-#   Paso 1: escalar el ASG App de Irlanda antes de desviar trafico.
-#   Paso 2: escalar el ASG Web de Irlanda antes de desviar trafico.
-#   Paso 3: forzar failover de trafico via Route 53 Health Check.
+# Workflow:
+#   Paso 1: escalar el ASG App de Irlanda.
+#   Paso 2: escalar el ASG Web de Irlanda.
+#   Paso 3: redirigir trafico via Route 53 Health Check.
 # =============================================================================
 resource "aws_arcregionswitch_plan" "main_dr_plan" {
   name              = "${var.project_prefix}-dr-plan"
   execution_role    = aws_iam_role.arc_execution_role.arn
   recovery_approach = "activePassive"
 
-  regions = [var.aws_region, var.dr_region]
+  regions        = [var.aws_region, var.dr_region]
   primary_region = var.aws_region
 
   workflow {
     workflow_target_action = "activate"
 
-    # Paso 1: Escalar el ASG App de Irlanda a capacidad de produccion
     step {
       name                 = "scale-up-ireland-app-asg"
       execution_block_type = "EC2AutoScaling"
@@ -802,13 +838,12 @@ resource "aws_arcregionswitch_plan" "main_dr_plan" {
           arn = module.app_asg_ireland.autoscaling_group_arn
         }
 
-        target_percent               = 300
+        target_percent               = 100
         capacity_monitoring_approach = "sampledMaxInLast24Hours"
         timeout_minutes              = 60
       }
     }
 
-    # Paso 2: Escalar el ASG Web de Irlanda a capacidad de produccion
     step {
       name                 = "scale-up-ireland-web-asg"
       execution_block_type = "EC2AutoScaling"
@@ -822,21 +857,20 @@ resource "aws_arcregionswitch_plan" "main_dr_plan" {
           arn = module.web_asg_ireland.autoscaling_group_arn
         }
 
-        target_percent               = 300
+        target_percent               = 100
         capacity_monitoring_approach = "sampledMaxInLast24Hours"
         timeout_minutes              = 60
       }
     }
 
-    # Paso 3: Forzar failover de trafico via Route 53 Health Check
     step {
       name                 = "failover-route53-traffic"
       execution_block_type = "Route53HealthCheck"
 
       route53_health_check_config {
-        hosted_zone_id = data.aws_route53_zone.main.zone_id
-        record_name    = var.domain_name
-        timeout_minutes              = 60
+        hosted_zone_id  = data.aws_route53_zone.main.zone_id
+        record_name     = var.domain_name
+        timeout_minutes = 60
       }
     }
   }
@@ -847,8 +881,9 @@ resource "aws_arcregionswitch_plan" "main_dr_plan" {
 
   depends_on = [
     aws_iam_role_policy.arc_plan_permissions,
+    aws_route53_record.primary,
+    aws_route53_record.secondary,
     module.app_asg_ireland,
-    module.web_asg_ireland,
-    aws_route53_health_check.frankfurt_alb,
+    module.web_asg_ireland
   ]
 }
