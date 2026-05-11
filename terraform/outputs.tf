@@ -78,10 +78,6 @@ output "domain_name" {
   value       = "http://${var.domain_name}"
 }
 
-output "route53_health_check_id" {
-  description = "ID del health check de Frankfurt usado por Route 53"
-  value       = aws_route53_health_check.frankfurt_alb.id
-}
 
 # ARC
 output "arc_dr_plan_name" {
