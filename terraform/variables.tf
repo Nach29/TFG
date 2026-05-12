@@ -1,260 +1,280 @@
 # =============================================================================
-# ROOT VARIABLES — Fase 2: se añaden variables para Irlanda, ASG y dominio.
-# Se mantienen los defaults más baratos/free-tier donde aplica.
+# Root variables
+#
+# Defaults are intentionally small to keep the TFG environment affordable while
+# still demonstrating zonal and regional resilience patterns.
 # =============================================================================
 
-# ── General ───────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
+# General
+# -----------------------------------------------------------------------------
 
 variable "aws_region" {
-  description = "Región AWS principal (Fráncfort — activa)"
+  description = "Primary AWS region. Frankfurt is the active region."
   type        = string
   default     = "eu-central-1"
 }
 
 variable "dr_region" {
-  description = "Región AWS de Disaster Recovery (Irlanda — warm standby)"
+  description = "Disaster Recovery AWS region. Ireland is the warm standby region."
   type        = string
   default     = "eu-west-1"
 }
 
 variable "project_prefix" {
-  description = "Prefijo de nombre aplicado a todos los recursos. Convención: tfg-student-icolasma-TFG"
+  description = "Name prefix applied to project resources."
   type        = string
   default     = "tfg-student-icolasma-TFG"
 }
 
 variable "domain_name" {
-  description = "Nombre del dominio raíz. La Hosted Zone debe existir previamente en Route 53."
+  description = "Root domain name. The public Route 53 hosted zone must already exist."
   type        = string
   default     = "dontpushthis.link"
 }
 
-# ── Red — Fráncfort (eu-central-1) ───────────────────────────────────────────
+# -----------------------------------------------------------------------------
+# Network - Frankfurt active region
+# -----------------------------------------------------------------------------
 
 variable "vpc_cidr" {
-  description = "CIDR del VPC principal (Fráncfort)"
+  description = "CIDR block for the active VPC in Frankfurt."
   type        = string
   default     = "10.0.0.0/16"
 }
 
 variable "availability_zones" {
-  description = "Exactamente 3 AZs de eu-central-1 para el despliegue activo"
+  description = "Three Availability Zones used by the active region deployment."
   type        = list(string)
   default     = ["eu-central-1a", "eu-central-1b", "eu-central-1c"]
 }
 
 variable "public_subnet_cidrs" {
-  description = "CIDRs de subnets públicas en Fráncfort — uno por AZ (alineados por índice)"
+  description = "Public subnet CIDRs for Frankfurt, one per Availability Zone."
   type        = list(string)
   default     = ["10.0.0.0/24", "10.0.1.0/24", "10.0.2.0/24"]
 }
 
 variable "private_subnet_cidrs" {
-  description = "CIDRs de subnets privadas en Fráncfort — uno por AZ (alineados por índice)"
+  description = "Private subnet CIDRs for Frankfurt, one per Availability Zone."
   type        = list(string)
   default     = ["10.0.10.0/24", "10.0.11.0/24", "10.0.12.0/24"]
 }
 
-# ── Red — Irlanda (eu-west-1, Warm Standby) ───────────────────────────────────
+# -----------------------------------------------------------------------------
+# Network - Ireland warm standby region
+# -----------------------------------------------------------------------------
 
 variable "dr_vpc_cidr" {
-  description = "CIDR del VPC de DR en Irlanda. Debe ser diferente al de Fráncfort para evitar solapamiento."
+  description = "CIDR block for the DR VPC in Ireland. It must not overlap Frankfurt."
   type        = string
   default     = "10.1.0.0/16"
 }
 
 variable "dr_availability_zones" {
-  description = "Exactamente 3 AZs de eu-west-1 para el despliegue standby"
+  description = "Three Availability Zones used by the warm standby region."
   type        = list(string)
   default     = ["eu-west-1a", "eu-west-1b", "eu-west-1c"]
 }
 
 variable "dr_public_subnet_cidrs" {
-  description = "CIDRs de subnets públicas en Irlanda — uno por AZ"
+  description = "Public subnet CIDRs for Ireland, one per Availability Zone."
   type        = list(string)
   default     = ["10.1.0.0/24", "10.1.1.0/24", "10.1.2.0/24"]
 }
 
 variable "dr_private_subnet_cidrs" {
-  description = "CIDRs de subnets privadas en Irlanda — uno por AZ"
+  description = "Private subnet CIDRs for Ireland, one per Availability Zone."
   type        = list(string)
   default     = ["10.1.10.0/24", "10.1.11.0/24", "10.1.12.0/24"]
 }
 
-# ── EC2 / ASG — Compute ───────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
+# EC2 and Auto Scaling
+# -----------------------------------------------------------------------------
 
 variable "ami_id" {
   description = <<-EOT
-    AMI ID para las instancias (Amazon Linux 2023).
-    Cuando es null (default), se obtiene automáticamente desde AWS SSM Parameter Store.
-    Anular solo para fijar una versión concreta de AMI.
+    Optional AMI ID for EC2 instances.
+    When null, Terraform resolves the latest Amazon Linux 2023 AMI from AWS SSM
+    Parameter Store in each region.
   EOT
   type        = string
   default     = null
 }
 
 variable "web_instance_type" {
-  description = "Tipo de instancia EC2 para la capa Web. t3.micro (~$0.0104/hr)."
+  description = "EC2 instance type for the Web tier."
   type        = string
   default     = "t3.micro"
 }
 
 variable "app_instance_type" {
-  description = "Tipo de instancia EC2 para la capa App. t3.micro (~$0.0104/hr)."
+  description = "EC2 instance type for the App tier."
   type        = string
   default     = "t3.micro"
 }
 
 variable "root_volume_size" {
-  description = "Tamaño del volumen EBS raíz en GiB."
+  description = "Root EBS volume size in GiB."
   type        = number
   default     = 8
 }
 
 variable "root_volume_type" {
-  description = "Tipo del volumen EBS raíz. gp3 es más barato y rápido que gp2."
+  description = "Root EBS volume type."
   type        = string
   default     = "gp3"
 }
 
-# ── ASG Capacidades — Fráncfort (Región Activa) ───────────────────────────────
+# -----------------------------------------------------------------------------
+# Auto Scaling capacity - Frankfurt active region
+# -----------------------------------------------------------------------------
 
 variable "web_asg_desired" {
-  description = "desired_capacity del ASG Web en Fráncfort (región activa)."
+  description = "Desired capacity for the Web ASG in Frankfurt."
   type        = number
   default     = 3
 }
 
 variable "web_asg_min" {
-  description = "min_size del ASG Web en Fráncfort."
+  description = "Minimum capacity for the Web ASG in Frankfurt."
   type        = number
   default     = 1
 }
 
 variable "web_asg_max" {
-  description = "max_size del ASG Web en Fráncfort."
+  description = "Maximum capacity for the Web ASG in Frankfurt."
   type        = number
   default     = 6
 }
 
 variable "app_asg_desired" {
-  description = "desired_capacity del ASG App en Fráncfort (región activa)."
+  description = "Desired capacity for the App ASG in Frankfurt."
   type        = number
   default     = 3
 }
 
 variable "app_asg_min" {
-  description = "min_size del ASG App en Fráncfort."
+  description = "Minimum capacity for the App ASG in Frankfurt."
   type        = number
   default     = 1
 }
 
 variable "app_asg_max" {
-  description = "max_size del ASG App en Fráncfort."
+  description = "Maximum capacity for the App ASG in Frankfurt."
   type        = number
   default     = 6
 }
 
-# ── ASG Capacidades — Irlanda (Warm Standby) ──────────────────────────────────
+# -----------------------------------------------------------------------------
+# Auto Scaling capacity - Ireland warm standby region
+# -----------------------------------------------------------------------------
 
 variable "dr_web_asg_desired" {
-  description = "desired_capacity del ASG Web en Irlanda (warm standby = 1 instancia)."
+  description = "Desired capacity for the Web ASG in Ireland."
   type        = number
   default     = 1
 }
 
 variable "dr_web_asg_min" {
-  description = "min_size del ASG Web en Irlanda."
+  description = "Minimum capacity for the Web ASG in Ireland."
   type        = number
   default     = 1
 }
 
 variable "dr_web_asg_max" {
-  description = "max_size del ASG Web en Irlanda (límite para el escalado del ARC Plan)."
+  description = "Maximum capacity for the Web ASG in Ireland."
   type        = number
   default     = 6
 }
 
 variable "dr_app_asg_desired" {
-  description = "desired_capacity del ASG App en Irlanda (warm standby = 1 instancia)."
+  description = "Desired capacity for the App ASG in Ireland."
   type        = number
   default     = 1
 }
 
 variable "dr_app_asg_min" {
-  description = "min_size del ASG App en Irlanda."
+  description = "Minimum capacity for the App ASG in Ireland."
   type        = number
   default     = 1
 }
 
 variable "dr_app_asg_max" {
-  description = "max_size del ASG App en Irlanda."
+  description = "Maximum capacity for the App ASG in Ireland."
   type        = number
   default     = 6
 }
 
-# ── Puertos ───────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
+# Ports
+# -----------------------------------------------------------------------------
 
 variable "web_port" {
-  description = "Puerto TCP en el que la capa Web sirve tráfico HTTP"
+  description = "TCP port served by the Web tier."
   type        = number
   default     = 80
 }
 
 variable "app_port" {
-  description = "Puerto TCP en el que la capa App sirve tráfico HTTP"
+  description = "TCP port served by the App tier."
   type        = number
   default     = 8080
 }
 
-# ── ALB ───────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
+# ALB and Route 53
+# -----------------------------------------------------------------------------
 
 variable "alb_listener_port" {
-  description = "Puerto en el que el listener del ALB acepta tráfico"
+  description = "Port exposed by the ALB listener."
   type        = number
   default     = 80
 }
 
 variable "alb_health_check_path" {
-  description = "Ruta del health check del ALB. Apunta al archivo estático para el experimento de gray failure."
+  description = "HTTP path used by ALB target group health checks."
   type        = string
   default     = "/health.html"
 }
 
 variable "arc_route53_health_check_id_frankfurt" {
-  description = "Health check ID generado por ARC Region Switch para el record DNS de Frankfurt."
+  description = "ARC Region Switch health check ID for the Frankfurt DNS record."
   type        = string
   default     = "28bd64da-9556-4ab0-b351-16c25988048b"
 }
 
 variable "arc_route53_health_check_id_ireland" {
-  description = "Health check ID generado por ARC Region Switch para el record DNS de Irlanda."
+  description = "ARC Region Switch health check ID for the Ireland DNS record."
   type        = string
   default     = "aa6f3397-8796-44ce-ad5c-53802612d253"
 }
 
 variable "alb_idle_timeout" {
-  description = "Timeout de conexión idle en segundos para el ALB"
+  description = "ALB idle connection timeout in seconds."
   type        = number
   default     = 60
 }
 
-# ── DynamoDB ──────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
+# DynamoDB
+# -----------------------------------------------------------------------------
 
 variable "dynamodb_table_name" {
-  description = "Nombre de la tabla DynamoDB de sesiones (Global Table)"
+  description = "DynamoDB sessions table name."
   type        = string
   default     = "tfg-student-icolasma-TFG-sessions"
 }
 
 variable "dynamodb_hash_key" {
-  description = "Nombre del atributo a usar como partition key (hash key)"
+  description = "DynamoDB partition key attribute name."
   type        = string
   default     = "sessionId"
 }
 
 variable "dynamodb_pitr_enabled" {
-  description = "Habilitar Point-in-Time Recovery. Añade coste — desactivado por defecto en dev/demo."
+  description = "Enable DynamoDB point-in-time recovery."
   type        = bool
   default     = false
 }

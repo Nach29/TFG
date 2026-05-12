@@ -59,7 +59,7 @@ module "vpc" {
 }
 
 # =============================================================================
-# 2. SECURITY GROUPS ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Frankfurt
+# 2. SECURITY GROUPS - Frankfurt
 # Orden de dependencias:
 #   sg_alb  sg_web (referencia sg_alb)
 #   sg_internal_alb (nuevo, delante de App tier)
@@ -173,7 +173,7 @@ module "dynamodb" {
     }
   ]
 
-  replica_regions                = [var.dr_region] # ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ eu-west-1
+  replica_regions                = [var.dr_region] # eu-west-1
   point_in_time_recovery_enabled = var.dynamodb_pitr_enabled
   server_side_encryption_enabled = true
 }
@@ -236,10 +236,10 @@ module "iam_app" {
 # 5. INTERNAL ALB  Frankfurt (delante de la capa App)
 #
 # CRITICO: enable_cross_zone_load_balancing = false
-#   Si esta true, el Internal ALB distribuirÃƒÂ­a requests entre TODAS las instancias
-#   App de todas las AZs. Esto romperÃƒÂ­a el experimento de Zonal Shift de la Fase 1:
-#   si hacemos un shift de eu-central-1a, el trafico deberÃƒÂ­a limitarse a 1b y 1c,
-#   pero con cross_zone=true seguirÃƒÂ­a llegando a instancias de 1a a travÃƒÂ©s del ALB.
+#   Si esta true, el Internal ALB distribuiria requests entre TODAS las instancias
+#   App de todas las AZs. Esto romperia el experimento de Zonal Shift de la Fase 1:
+#   si hacemos un shift de eu-central-1a, el trafico deberia limitarse a 1b y 1c,
+#   pero con cross_zone=true seguiria llegando a instancias de 1a a traves del ALB.
 #
 # enable_zonal_shift = false: Los ALBs internos no participan en ARC Zonal Shift
 #   (el shift lo hace el ALB publico externo).
@@ -259,7 +259,7 @@ module "internal_alb" {
   tg_port        = var.app_port
   tg_protocol    = "HTTP"
   tg_target_type = "instance"
-  hc_path        = "/index.html" # La App responde con JSON en la raÃƒÆ’Ã‚Â­z
+  hc_path        = "/index.html" # La App responde con JSON en la raiz
 
   tags_lb = { Name = "${local.short_prefix}-int-alb" }
   tags_tg = { Name = "${local.short_prefix}-int-alb-tg" }
@@ -507,7 +507,7 @@ module "iam_app_ireland" {
             "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem",
             "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:Scan",
           ]
-          # ARN de la rÃƒÆ’Ã‚Â©plica en Irlanda (misma tabla, regiÃƒÆ’Ã‚Â³n diferente)
+          # ARN de la replica en Irlanda (misma tabla, region diferente)
           Resource = "arn:aws:dynamodb:${var.dr_region}:${data.aws_caller_identity.current.account_id}:table/${var.dynamodb_table_name}"
         }
       ]

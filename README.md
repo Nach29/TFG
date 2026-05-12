@@ -1,127 +1,198 @@
-# TFG - Resiliencia Cloud en AWS con Terraform
+# TFG - Resiliencia cloud en AWS con Terraform
 
-Proyecto de Trabajo de Fin de Grado centrado en resiliencia sobre AWS. El repositorio despliega una arquitectura web de tres capas gestionada 100% con Terraform y preparada para demostrar dos escenarios: fallo gris zonal con ARC Zonal Shift y desastre regional con failover desde Frankfurt a Irlanda.
+Este repositorio despliega una arquitectura web de tres capas en AWS para demostrar resiliencia zonal y regional con Terraform. La region activa es Frankfurt (`eu-central-1`) y la region de Disaster Recovery es Irlanda (`eu-west-1`) en modo warm standby.
 
-![Architecture](Arquitectura-tfg.png)
+![Arquitectura](Arquitectura-tfg.png)
 
 ## Objetivo
 
-El objetivo del TFG es mostrar que una plataforma sencilla y contenida en costes puede incorporar mecanismos reales de resiliencia:
+El objetivo del TFG es demostrar que una plataforma sencilla, reproducible y contenida en costes puede incorporar mecanismos reales de resiliencia:
 
-- Aislamiento automatico de una Availability Zone degradada.
-- Failover regional orquestado hacia una region warm standby.
-- Infraestructura reproducible y auditable mediante Terraform.
-- Operacion segura sin SSH, usando solo SSM Session Manager.
+- Recuperacion automatica ante fallo gris zonal con ARC Zonal Shift.
+- Failover regional orquestado con ARC Region Switch.
+- DNS global con Route 53 Failover Routing.
+- Datos replicados con DynamoDB Global Tables.
+- Operacion sin SSH, usando SSM Session Manager.
 
-## Arquitectura actual
+## Arquitectura
+
+Flujo principal de peticion:
+
+```text
+Internet
+  -> Route 53
+  -> Public ALB
+  -> Web ASG privado
+  -> Internal ALB
+  -> App ASG privado
+  -> DynamoDB Global Table
+```
 
 Regiones:
-- `eu-central-1` (Frankfurt): region activa.
-- `eu-west-1` (Ireland): warm standby.
 
-Camino de peticion:
-- Internet -> Public ALB -> Web ASG -> Internal ALB -> App ASG -> DynamoDB Global Table.
+- `eu-central-1`: Frankfurt, region activa.
+- `eu-west-1`: Irlanda, region warm standby.
 
 Capas:
-- Web: Apache + PHP en ASG privado.
-- App: servidor HTTP Python en ASG privado.
-- Datos: DynamoDB Global Table replicada entre Frankfurt e Irlanda.
 
-DNS global:
-- `dontpushthis.link` usa Route 53 Failover Routing.
-- El registro `PRIMARY` apunta al ALB de Frankfurt.
-- El registro `SECONDARY` apunta al ALB de Irlanda.
+- Web: Apache/PHP en Auto Scaling Group privado.
+- App: servidor HTTP Python en Auto Scaling Group privado.
+- Datos: DynamoDB Global Table con replica regional.
+- DNS: `dontpushthis.link` con registros `PRIMARY` y `SECONDARY`.
 
-## Mecanismos de resiliencia
+## Resiliencia zonal
 
-### 1. Fallo gris zonal
+La fase zonal usa ARC Zonal Shift sobre el ALB publico de Frankfurt.
 
-El ALB publico de Frankfurt tiene ARC Zonal Shift habilitado. El modulo `auto_recovery` crea una alarma de CloudWatch por AZ y una Lambda que inicia un zonal shift cuando detecta un pico de `HTTPCode_Target_5XX_Count`.
+El modulo `terraform/modules/auto_recovery` crea:
 
-Puntos importantes del experimento:
-- El Internal ALB mantiene `enable_cross_zone_load_balancing = false`.
-- El objetivo es preservar el aislamiento por zona para que el experimento sea observable.
-- Las instancias no exponen SSH; el acceso operativo se hace via SSM.
+- Una alarma CloudWatch por Availability Zone.
+- Una Lambda Python que recibe la alarma.
+- Permisos IAM para iniciar `arc-zonal-shift:StartZonalShift`.
+- Un paquete Lambda generado automaticamente con `archive_file`.
 
-### 2. Desastre regional
+Cuando una alarma detecta un pico de `HTTPCode_Target_5XX_Count` en una AZ, la Lambda inicia un Zonal Shift para sacar trafico de esa zona durante una ventana temporal.
 
-El recurso `aws_arcregionswitch_plan` modela un failover activo-pasivo entre Frankfurt e Irlanda.
+Decision importante: los ALB internos tienen `enable_cross_zone_load_balancing = false`. Esto mantiene el aislamiento por zona y permite observar el fallo gris durante la demo.
 
-Workflow actual del plan:
-1. Escalar el ASG de la capa App en Irlanda a capacidad de produccion.
-2. Escalar el ASG de la capa Web en Irlanda a capacidad de produccion.
-3. Forzar el failover DNS mediante el health check de Route 53.
+## Resiliencia regional
 
-La validacion intermedia de DynamoDB se elimino para reducir complejidad del TFG y dejar la demo mas directa.
+La fase regional usa `aws_arcregionswitch_plan` para modelar un failover activo-pasivo entre Frankfurt e Irlanda.
 
-## Restricciones de diseno
+Workflow del plan:
 
-Estas decisiones forman parte del diseno del proyecto y se respetan en el codigo:
+1. Escalar el ASG App de Irlanda.
+2. Escalar el ASG Web de Irlanda.
+3. Redirigir el trafico DNS con el bloque `Route53HealthCheck`.
 
-- FinOps: instancias `t3.micro` y un solo NAT Gateway por region.
-- Least privilege: IAM granular y sin acceso SSH.
-- Terraform AWS Provider `~> 6.38` para usar `aws_arcregionswitch_plan`.
-- `enable_cross_zone_load_balancing = false` en el Internal ALB.
+El plan usa los records de Route 53:
 
-## Estructura del repositorio
+- `PRIMARY`: Frankfurt, `set_identifier = eu-central-1`.
+- `SECONDARY`: Irlanda, `set_identifier = eu-west-1`.
+
+ARC Region Switch genera sus propios health checks para esos records. Terraform los asocia asi:
+
+| Region | Record | Health check ID |
+| --- | --- | --- |
+| `eu-central-1` | `PRIMARY` | `28bd64da-9556-4ab0-b351-16c25988048b` |
+| `eu-west-1` | `SECONDARY` | `aa6f3397-8796-44ce-ad5c-53802612d253` |
+
+Si el plan ARC se borra y se vuelve a crear, estos IDs pueden cambiar. En ese caso hay que actualizar las variables:
+
+- `arc_route53_health_check_id_frankfurt`
+- `arc_route53_health_check_id_ireland`
+
+## Estructura
 
 ```text
 TFG/
-|-- terraform/
-|   |-- main.tf
-|   |-- providers.tf
-|   |-- variables.tf
-|   |-- data.tf
-|   |-- outputs.tf
-|   |-- bootstrap/
-|   `-- modules/
-|       |-- alb/
-|       |-- auto_recovery/
-|       |-- compute/
-|       |-- dynamodb/
-|       |-- iam/
-|       |-- security/
-|       `-- vpc/
+|-- README.md
 |-- Arquitectura-tfg.png
-|-- reporte_fase2.md
 |-- tester.py
-`-- README.md
+`-- terraform/
+    |-- main.tf
+    |-- providers.tf
+    |-- variables.tf
+    |-- data.tf
+    |-- outputs.tf
+    |-- bootstrap/
+    `-- modules/
+        |-- alb/
+        |-- auto_recovery/
+        |-- compute/
+        |-- dynamodb/
+        |-- iam/
+        |-- security/
+        `-- vpc/
 ```
 
 ## Requisitos
 
-- Terraform `>= 1.6.0`
-- AWS CLI configurado con credenciales validas
-- Permisos para EC2, VPC, ALB, IAM, Lambda, CloudWatch, Route 53, DynamoDB, SSM y ARC
+- Terraform `>= 1.6.0`.
+- AWS CLI configurado con credenciales validas.
+- Una hosted zone publica existente para `dontpushthis.link`.
+- Permisos para VPC, EC2, Auto Scaling, ALB, IAM, Lambda, CloudWatch, Route 53, DynamoDB, SSM y ARC.
 
-## Despliegue rapido
+## Despliegue
 
-```bash
+Desde la raiz del repositorio:
+
+```powershell
 cd terraform
 terraform init
 terraform plan
 terraform apply
 ```
 
-Una vez aplicado:
-- El dominio publicado es `http://dontpushthis.link`
-- Tambien puedes usar los outputs de Terraform para acceder a los ALB directamente
+Salida principal:
 
-## Documentacion tecnica
+- `domain_name`: URL publicada por Route 53.
+- `arc_dr_plan_name`: nombre del plan ARC Region Switch.
+- `arc_dr_plan_arn`: ARN del plan ARC Region Switch.
+- ARNs y nombres de los ASG principales.
 
-La documentacion mas cercana al despliegue esta en:
-- [terraform/README.md](terraform/README.md)
-- [reporte_fase2.md](reporte_fase2.md)
+## Verificacion rapida
 
-## Estado del codigo
+Comprobar formato:
 
-Tras la limpieza actual:
-- Se ha retirado el modulo obsoleto de validacion ARC que ya no se usa.
-- El `root` Terraform refleja el workflow real de 3 pasos del Region Switch Plan.
-- La documentacion se ha alineado con la arquitectura activa del repositorio.
+```powershell
+terraform -chdir=terraform fmt -check
+```
+
+Validar Terraform:
+
+```powershell
+terraform -chdir=terraform validate
+```
+
+Si `validate` falla por plugins corruptos o checksums de `.terraform.lock.hcl`, regenera la cache local:
+
+```powershell
+terraform -chdir=terraform init
+terraform -chdir=terraform validate
+```
+
+## Operacion de la demo
+
+Para probar el servicio publicado:
+
+```powershell
+curl http://dontpushthis.link
+```
+
+Para observar el comportamiento de la fase zonal puedes usar:
+
+```powershell
+python tester.py http://dontpushthis.link
+```
+
+Para revisar el estado del plan regional, entra en AWS Console:
+
+```text
+Route 53 ARC -> Region switch -> tfg-student-icolasma-TFG-dr-plan
+```
+
+## Mantenimiento reciente
+
+En la limpieza actual se ha hecho lo siguiente:
+
+- Se han asociado los health checks generados por ARC Region Switch a los records `PRIMARY` y `SECONDARY`.
+- Se ha eliminado el health check manual antiguo de Route 53 porque no satisfacia la validacion de ARC Region Switch.
+- Se han completado permisos IAM del execution role de ARC para ASG, CloudWatch metrics y Route 53.
+- Se han eliminado paquetes `.zip` generados por Terraform y se han anadido al `.gitignore`.
+- Se han limpiado comentarios y descripciones con caracteres corruptos.
+- Se ha reescrito este README para reflejar solo los archivos y flujos que existen actualmente.
+
+## Notas de coste
+
+El despliegue crea recursos con coste: NAT Gateways, ALBs, EC2, DynamoDB, Lambda, CloudWatch y Route 53. Para evitar cargos cuando no estes usando la demo:
+
+```powershell
+cd terraform
+terraform destroy
+```
 
 ## Autor
 
 Ignacio Colas Martin
-Trabajo de Fin de Grado - 2026
-
+Trabajo de Fin de Grado, 2026

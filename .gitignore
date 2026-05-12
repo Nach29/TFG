@@ -28,6 +28,10 @@ crash.*.log
 *.tfplan.json
 plan.out
 
+# Terraform-generated Lambda packages
+terraform/*-auto-recovery.zip
+terraform/modules/auto_recovery/lambda_src/*.zip
+
 # Override files (used for local customisation)
 override.tf
 override.tf.json
