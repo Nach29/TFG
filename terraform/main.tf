@@ -743,13 +743,24 @@ data "aws_iam_policy_document" "arc_plan_permissions" {
   }
 
   statement {
+    sid    = "AllowASGMetricsRead"
+    effect = "Allow"
+    actions = [
+      "cloudwatch:GetMetricStatistics"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
     sid    = "AllowASGScaleUp"
     effect = "Allow"
     actions = [
       "autoscaling:UpdateAutoScalingGroup"
     ]
     resources = [
+      module.app_asg.autoscaling_group_arn,
       module.app_asg_ireland.autoscaling_group_arn,
+      module.web_asg.autoscaling_group_arn,
       module.web_asg_ireland.autoscaling_group_arn
     ]
   }
@@ -871,6 +882,16 @@ resource "aws_arcregionswitch_plan" "main_dr_plan" {
         hosted_zone_id  = data.aws_route53_zone.main.zone_id
         record_name     = var.domain_name
         timeout_minutes = 60
+
+        record_set {
+          record_set_identifier = var.aws_region
+          region                = var.aws_region
+        }
+
+        record_set {
+          record_set_identifier = var.dr_region
+          region                = var.dr_region
+        }
       }
     }
   }
