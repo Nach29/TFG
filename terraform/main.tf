@@ -633,32 +633,11 @@ module "web_asg_ireland" {
 # =============================================================================
 
 # =============================================================================
-# 17. ROUTE 53 HEALTH CHECK - Frankfurt
-# Monitoriza el ALB publico de Frankfurt.
-# Este health check se asocia al registro PRIMARY.
-# =============================================================================
-resource "aws_route53_health_check" "frankfurt_alb" {
-  fqdn              = module.alb.alb_dns_name
-  port              = 80
-  type              = "HTTP"
-  resource_path     = var.alb_health_check_path
-  failure_threshold = 3
-  request_interval  = 30
-
-  # Route 53 exige al menos 3 regiones si se define este campo.
-  regions = ["eu-west-1", "us-east-1", "ap-southeast-1"]
-
-  tags = {
-    Name = "${var.project_prefix}-frankfurt-hc"
-  }
-}
-
-# =============================================================================
-# 18. REGISTRO DNS PRIMARY - Frankfurt
+# 17. REGISTRO DNS PRIMARY - Frankfurt
 # IMPORTANTE:
 #   - set_identifier contiene la region exacta para que ARC Region Switch pueda
 #     mapear este record set con eu-central-1.
-#   - evaluate_target_health = false porque usamos health_check_id explicito.
+#   - health_check_id usa el health check generado por ARC Region Switch.
 # =============================================================================
 resource "aws_route53_record" "primary" {
   zone_id = data.aws_route53_zone.main.zone_id
@@ -670,7 +649,7 @@ resource "aws_route53_record" "primary" {
   }
 
   set_identifier  = var.aws_region
-  health_check_id = aws_route53_health_check.frankfurt_alb.id
+  health_check_id = var.arc_route53_health_check_id_frankfurt
 
   alias {
     name                   = module.alb.alb_dns_name
@@ -680,12 +659,11 @@ resource "aws_route53_record" "primary" {
 }
 
 # =============================================================================
-# 19. REGISTRO DNS SECONDARY - Irlanda
+# 18. REGISTRO DNS SECONDARY - Irlanda
 # IMPORTANTE:
 #   - set_identifier contiene la region exacta para que ARC Region Switch pueda
 #     mapear este record set con eu-west-1.
-#   - El SECONDARY puede no tener health_check_id si solo quieres failover
-#     Route 53 clasico. Para Region Switch, revisa la nota de abajo.
+#   - health_check_id usa el health check generado por ARC Region Switch.
 # =============================================================================
 resource "aws_route53_record" "secondary" {
   zone_id = data.aws_route53_zone.main.zone_id
@@ -696,7 +674,8 @@ resource "aws_route53_record" "secondary" {
     type = "SECONDARY"
   }
 
-  set_identifier = var.dr_region
+  set_identifier  = var.dr_region
+  health_check_id = var.arc_route53_health_check_id_ireland
 
   alias {
     name                   = module.alb_ireland.alb_dns_name
@@ -773,7 +752,8 @@ data "aws_iam_policy_document" "arc_plan_permissions" {
       "route53:GetHealthCheck"
     ]
     resources = [
-      "arn:aws:route53:::healthcheck/${aws_route53_health_check.frankfurt_alb.id}"
+      "arn:aws:route53:::healthcheck/${var.arc_route53_health_check_id_frankfurt}",
+      "arn:aws:route53:::healthcheck/${var.arc_route53_health_check_id_ireland}"
     ]
   }
 

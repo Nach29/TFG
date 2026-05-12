@@ -221,6 +221,18 @@ variable "alb_health_check_path" {
   default     = "/health.html"
 }
 
+variable "arc_route53_health_check_id_frankfurt" {
+  description = "Health check ID generado por ARC Region Switch para el record DNS de Frankfurt."
+  type        = string
+  default     = "28bd64da-9556-4ab0-b351-16c25988048b"
+}
+
+variable "arc_route53_health_check_id_ireland" {
+  description = "Health check ID generado por ARC Region Switch para el record DNS de Irlanda."
+  type        = string
+  default     = "aa6f3397-8796-44ce-ad5c-53802612d253"
+}
+
 variable "alb_idle_timeout" {
   description = "Timeout de conexión idle en segundos para el ALB"
   type        = number
