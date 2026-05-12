@@ -227,12 +227,6 @@ variable "app_port" {
 # ALB and Route 53
 # -----------------------------------------------------------------------------
 
-variable "alb_listener_port" {
-  description = "Port exposed by the ALB listener."
-  type        = number
-  default     = 80
-}
-
 variable "alb_health_check_path" {
   description = "HTTP path used by ALB target group health checks."
   type        = string
@@ -249,12 +243,6 @@ variable "arc_route53_health_check_id_ireland" {
   description = "ARC Region Switch health check ID for the Ireland DNS record."
   type        = string
   default     = "aa6f3397-8796-44ce-ad5c-53802612d253"
-}
-
-variable "alb_idle_timeout" {
-  description = "ALB idle connection timeout in seconds."
-  type        = number
-  default     = 60
 }
 
 # -----------------------------------------------------------------------------

@@ -95,7 +95,6 @@ TFG/
     |-- variables.tf
     |-- data.tf
     |-- outputs.tf
-    |-- bootstrap/
     `-- modules/
         |-- alb/
         |-- auto_recovery/

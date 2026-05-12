@@ -71,7 +71,7 @@ module "sg_alb" {
   source = "./modules/security"
 
   name        = "${local.short_prefix}-alb-sg"
-  description = "ALB SG: permite HTTP/HTTPS desde internet"
+  description = "ALB SG: permite HTTP desde internet"
   vpc_id      = module.vpc.vpc_id
   tags        = { Name = "${local.short_prefix}-alb-sg" }
 
@@ -80,13 +80,6 @@ module "sg_alb" {
       description = "HTTP desde internet"
       from_port   = 80
       to_port     = 80
-      protocol    = "tcp"
-      cidr_blocks = ["0.0.0.0/0"]
-    },
-    {
-      description = "HTTPS desde internet"
-      from_port   = 443
-      to_port     = 443
       protocol    = "tcp"
       cidr_blocks = ["0.0.0.0/0"]
     }
@@ -394,13 +387,12 @@ module "sg_alb_ireland" {
   providers = { aws = aws.ireland }
 
   name        = "${local.short_prefix}-alb-sg-ie"
-  description = "ALB SG Irlanda: permite HTTP/HTTPS desde internet"
+  description = "ALB SG Irlanda: permite HTTP desde internet"
   vpc_id      = module.vpc_ireland.vpc_id
   tags        = { Name = "${local.short_prefix}-alb-sg-ie" }
 
   ingress_rules = [
-    { description = "HTTP", from_port = 80, to_port = 80, protocol = "tcp", cidr_blocks = ["0.0.0.0/0"] },
-    { description = "HTTPS", from_port = 443, to_port = 443, protocol = "tcp", cidr_blocks = ["0.0.0.0/0"] }
+    { description = "HTTP", from_port = 80, to_port = 80, protocol = "tcp", cidr_blocks = ["0.0.0.0/0"] }
   ]
 }
 
