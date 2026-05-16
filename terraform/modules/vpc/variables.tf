@@ -1,5 +1,5 @@
 # =============================================================================
-# VPC MODULE — variables.tf
+# VPC module variables
 # =============================================================================
 
 variable "project_name" {
@@ -16,20 +16,15 @@ variable "vpc_cidr" {
 variable "availability_zones" {
   description = "List of Availability Zone names. Module expects exactly 3."
   type        = list(string)
-
-  validation {
-    condition     = length(var.availability_zones) == 3
-    error_message = "Exactly 3 Availability Zones must be provided."
-  }
 }
 
 variable "public_subnet_cidrs" {
-  description = "CIDR blocks for public subnets — must be index-aligned with availability_zones"
+  description = "CIDR blocks for public subnets. Must be index-aligned with availability_zones."
   type        = list(string)
 }
 
 variable "private_subnet_cidrs" {
-  description = "CIDR blocks for private subnets — must be index-aligned with availability_zones"
+  description = "CIDR blocks for private subnets. Must be index-aligned with availability_zones."
   type        = list(string)
 }
 

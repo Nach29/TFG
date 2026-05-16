@@ -1,12 +1,12 @@
 # =============================================================================
-# IAM MODULE — main.tf
+# IAM module
 #
 # Creates a generic IAM Role + optional managed/inline policy attachments
 # + an Instance Profile for EC2 use.
-# Follows the principle of least privilege — callers specify only what's needed.
+# Follows the principle of least privilege; callers specify only what is needed.
 # =============================================================================
 
-# Trust policy document — allows the specified AWS service to assume this role
+# Trust policy document: allows the specified AWS service to assume this role.
 data "aws_iam_policy_document" "assume_role" {
   statement {
     sid     = "AllowServiceAssumeRole"
@@ -57,7 +57,7 @@ resource "aws_iam_role_policy" "inline" {
 }
 
 # ---------------------------------------------------------------------------
-# Instance Profile — required to attach the role to an EC2 instance
+# Instance Profile: required to attach the role to an EC2 instance.
 # ---------------------------------------------------------------------------
 resource "aws_iam_instance_profile" "this" {
   name = var.instance_profile_name
@@ -69,7 +69,7 @@ resource "aws_iam_instance_profile" "this" {
 }
 
 # =============================================================================
-# Required providers — permite que el root pase provider aliases (e.g. aws.ireland)
+# Required providers: allows the root module to pass provider aliases.
 # Ref: https://developer.hashicorp.com/terraform/language/modules/develop/providers
 # =============================================================================
 terraform {

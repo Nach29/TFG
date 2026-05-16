@@ -1,5 +1,5 @@
 # =============================================================================
-# VPC MODULE — main.tf
+# VPC module
 #
 # Creates:
 #   - 1 VPC
@@ -22,7 +22,7 @@ resource "aws_vpc" "this" {
 }
 
 # ---------------------------------------------------------------------------
-# Internet Gateway — provides internet access for public subnets
+# Internet Gateway: provides internet access for public subnets.
 # ---------------------------------------------------------------------------
 resource "aws_internet_gateway" "this" {
   vpc_id = aws_vpc.this.id
@@ -33,7 +33,7 @@ resource "aws_internet_gateway" "this" {
 }
 
 # ---------------------------------------------------------------------------
-# Public subnets — one per AZ, instances here get public IPs
+# Public subnets: one per AZ, instances here get public IPs.
 # ---------------------------------------------------------------------------
 resource "aws_subnet" "public" {
   count = length(var.availability_zones)
@@ -51,7 +51,7 @@ resource "aws_subnet" "public" {
 }
 
 # ---------------------------------------------------------------------------
-# Private subnets — one per AZ, no public IPs assigned
+# Private subnets: one per AZ, no public IPs assigned.
 # ---------------------------------------------------------------------------
 resource "aws_subnet" "private" {
   count = length(var.availability_zones)
@@ -68,7 +68,7 @@ resource "aws_subnet" "private" {
 }
 
 # ---------------------------------------------------------------------------
-# Single NAT Gateway — COST OPTIMISATION
+# Single NAT Gateway: cost optimisation.
 # One NAT GW deployed in public-subnet-1 (AZ-a).
 # All three private subnets share it via a single private route table.
 # Trade-off: if AZ-a fails, private instances in AZ-b/c lose internet
@@ -97,7 +97,7 @@ resource "aws_nat_gateway" "this" {
 }
 
 # ---------------------------------------------------------------------------
-# Route table — Public (0.0.0.0/0 → IGW)
+# Route table: Public (0.0.0.0/0 -> IGW).
 # ---------------------------------------------------------------------------
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.this.id
@@ -120,7 +120,7 @@ resource "aws_route_table_association" "public" {
 }
 
 # ---------------------------------------------------------------------------
-# Route table — Private (0.0.0.0/0 → single NAT GW, shared by all AZs)
+# Route table: Private (0.0.0.0/0 -> single NAT GW, shared by all AZs).
 # ---------------------------------------------------------------------------
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.this.id
@@ -143,7 +143,7 @@ resource "aws_route_table_association" "private" {
 }
 
 # =============================================================================
-# Required providers — permite que el root pase provider aliases (e.g. aws.ireland)
+# Required providers: allows the root module to pass provider aliases.
 # Ref: https://developer.hashicorp.com/terraform/language/modules/develop/providers
 # =============================================================================
 terraform {
