@@ -8,7 +8,7 @@ from typing import Optional
 
 import requests
 
-DEFAULT_URL = "http://dontpushthis.link"
+DEFAULT_URL = "http://dontpushthis.link/"
 DEFAULT_INTERVAL = 0.5
 DEFAULT_TIMEOUT = 2.0
 DEFAULT_CSV = "resultados_experimento.csv"
