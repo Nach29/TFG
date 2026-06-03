@@ -42,7 +42,7 @@ locals {
 }
 
 # =============================================================================
-# frankfurt region activa
+# Frankfurt active region
 # =============================================================================
 
 # =============================================================================
@@ -60,24 +60,24 @@ module "vpc" {
 
 # =============================================================================
 # 2. SECURITY GROUPS - Frankfurt
-# Orden de dependencias:
-#   sg_alb  sg_web (referencia sg_alb)
-#   sg_internal_alb (nuevo, delante de App tier)
-#   sg_app  referencia sg_internal_alb (no sg_web directamente)
+# Dependency order:
+#   sg_alb -> sg_web (references sg_alb)
+#   sg_internal_alb (in front of the App tier)
+#   sg_app -> references sg_internal_alb, not sg_web directly
 # =============================================================================
 
-# ALB Publico
+# Public ALB
 module "sg_alb" {
   source = "./modules/security"
 
   name        = "${local.short_prefix}-alb-sg"
-  description = "ALB SG: permite HTTP desde internet"
+  description = "ALB SG: allows HTTP from the internet"
   vpc_id      = module.vpc.vpc_id
   tags        = { Name = "${local.short_prefix}-alb-sg" }
 
   ingress_rules = [
     {
-      description = "HTTP desde internet"
+      description = "HTTP from the internet"
       from_port   = 80
       to_port     = 80
       protocol    = "tcp"
@@ -91,13 +91,13 @@ module "sg_web" {
   source = "./modules/security"
 
   name        = "${local.short_prefix}-web-sg"
-  description = "Web SG: solo acepta trafico del ALB publico"
+  description = "Web SG: only accepts traffic from the public ALB"
   vpc_id      = module.vpc.vpc_id
   tags        = { Name = "${local.short_prefix}-web-sg" }
 
   ingress_rules = [
     {
-      description     = "HTTP desde ALB publico"
+      description     = "HTTP from public ALB"
       from_port       = var.web_port
       to_port         = var.web_port
       protocol        = "tcp"
@@ -106,18 +106,18 @@ module "sg_web" {
   ]
 }
 
-# Internal ALB (delante de App tier)
+# Internal ALB (in front of the App tier)
 module "sg_internal_alb" {
   source = "./modules/security"
 
   name        = "${local.short_prefix}-int-alb-sg"
-  description = "Internal ALB SG: acepta trafico de la capa Web en el puerto app"
+  description = "Internal ALB SG: accepts Web tier traffic on the app port"
   vpc_id      = module.vpc.vpc_id
   tags        = { Name = "${local.short_prefix}-int-alb-sg" }
 
   ingress_rules = [
     {
-      description     = "App port desde Web tier"
+      description     = "App port from Web tier"
       from_port       = var.app_port
       to_port         = var.app_port
       protocol        = "tcp"
@@ -131,13 +131,13 @@ module "sg_app" {
   source = "./modules/security"
 
   name        = "${local.short_prefix}-app-sg"
-  description = "App SG: solo acepta trafico del Internal ALB"
+  description = "App SG: only accepts traffic from the Internal ALB"
   vpc_id      = module.vpc.vpc_id
   tags        = { Name = "${local.short_prefix}-app-sg" }
 
   ingress_rules = [
     {
-      description     = "App traffic desde Internal ALB"
+      description     = "App traffic from Internal ALB"
       from_port       = var.app_port
       to_port         = var.app_port
       protocol        = "tcp"
@@ -147,11 +147,11 @@ module "sg_app" {
 }
 
 # =============================================================================
-# 3. DYNAMODB Global Table v2 (Activo-Activo con eu-west-1)
-# La tabla se crea en eu-central-1 (provider default) con stream habilitado.
-# El bloque replica todos los datos a eu-west-1 en tiempo real.
-# IMPORTANTE: al ser Global Table, NO se usa provider = aws.ireland aqui.
-# DynamoDB gestiona la replicacion internamente.
+# 3. DynamoDB Global Table v2 (active-active with eu-west-1)
+# The table is created in eu-central-1 (default provider) with streams enabled.
+# The replica block replicates all data to eu-west-1 in real time.
+# IMPORTANT: because this is a Global Table, provider = aws.ireland is not used here.
+# DynamoDB manages replication internally.
 # =============================================================================
 module "dynamodb" {
   source = "./modules/dynamodb"
@@ -200,9 +200,9 @@ module "iam_app" {
     "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
   ]
 
-  # Acceso R/W SOLO a la tabla especifica principio de minimo privilegio
-  # En Global Table: la misma politica es valida para leer/escribir localmente;
-  # la replicacion entre regiones la gestiona DynamoDB de forma transparente.
+  # Read/write access only to the specific table, following least privilege.
+  # With Global Tables, the same policy is valid for local reads/writes;
+  # cross-region replication is managed transparently by DynamoDB.
   inline_policies = {
     "dynamodb-sessions-readwrite" = jsonencode({
       Version = "2012-10-17"
@@ -226,16 +226,16 @@ module "iam_app" {
 }
 
 # =============================================================================
-# 5. INTERNAL ALB  Frankfurt (delante de la capa App)
+# 5. INTERNAL ALB Frankfurt (in front of the App tier)
 #
-# CRITICO: enable_cross_zone_load_balancing = false
-#   Si esta true, el Internal ALB distribuiria requests entre TODAS las instancias
-#   App de todas las AZs. Esto romperia el experimento de Zonal Shift de la Fase 1:
-#   si hacemos un shift de eu-central-1a, el trafico deberia limitarse a 1b y 1c,
-#   pero con cross_zone=true seguiria llegando a instancias de 1a a traves del ALB.
+# CRITICAL: enable_cross_zone_load_balancing = false
+#   If true, the Internal ALB would distribute requests across all App instances
+#   in all AZs. That would break the Phase 1 Zonal Shift experiment:
+#   shifting eu-central-1a should limit traffic to 1b and 1c, but with
+#   cross_zone=true traffic could still reach 1a instances through the ALB.
 #
-# enable_zonal_shift = false: Los ALBs internos no participan en ARC Zonal Shift
-#   (el shift lo hace el ALB publico externo).
+# enable_zonal_shift = false: internal ALBs do not participate in ARC Zonal Shift
+#   (the external public ALB performs the shift).
 # =============================================================================
 module "internal_alb" {
   source = "./modules/alb"
@@ -246,20 +246,20 @@ module "internal_alb" {
   security_group_ids = [module.sg_internal_alb.security_group_id]
 
   internal                         = true
-  enable_cross_zone_load_balancing = false # CRITICO para experimento Zonal Shift
-  enable_zonal_shift               = false # No aplica en ALBs internos
+  enable_cross_zone_load_balancing = false # Critical for the Zonal Shift experiment
+  enable_zonal_shift               = false # Not applicable to internal ALBs
 
   tg_port        = var.app_port
   tg_protocol    = "HTTP"
   tg_target_type = "instance"
-  hc_path        = "/index.html" # La App responde con JSON en la raiz
+  hc_path        = "/index.html" # App tier serves JSON at the root path
 
   tags_lb = { Name = "${local.short_prefix}-int-alb" }
   tags_tg = { Name = "${local.short_prefix}-int-alb-tg" }
 }
 
 # =============================================================================
-# 6. ALB PUBLICO Frankfurt (internet-facing, Zonal Shift habilitado)
+# 6. PUBLIC ALB Frankfurt (internet-facing, Zonal Shift enabled)
 # =============================================================================
 module "alb" {
   source = "./modules/alb"
@@ -271,7 +271,7 @@ module "alb" {
 
   internal                         = false
   enable_cross_zone_load_balancing = true
-  enable_zonal_shift               = true # Fase 1: ARC Zonal Shift habilitado
+  enable_zonal_shift               = true # Phase 1: ARC Zonal Shift enabled
 
   tg_port        = var.web_port
   tg_protocol    = "HTTP"
@@ -283,9 +283,9 @@ module "alb" {
 }
 
 # =============================================================================
-# 7. APP ASG  Frankfurt (desired=3, se registra en Internal ALB)
-# Se crea ANTES del Web ASG para que el Internal ALB DNS este disponible
-# al renderizar el user_data de la capa Web.
+# 7. APP ASG Frankfurt (desired=3, registered in the Internal ALB)
+# Created before the Web ASG so the Internal ALB DNS name is available
+# when rendering the Web tier user_data.
 # =============================================================================
 module "app_asg" {
   source = "./modules/compute"
@@ -304,19 +304,20 @@ module "app_asg" {
 
   root_volume_size = var.root_volume_size
   root_volume_type = var.root_volume_type
+  common_tags      = local.common_tags
 
   user_data = templatefile("${path.module}/modules/compute/user_data.sh.tpl", {
     tier                 = "app"
     app_port             = var.app_port
-    app_internal_alb_dns = "" # Unused en la rama app del template
+    app_internal_alb_dns = "" # Unused in the app branch of the template
   })
 
   additional_tags = { Tier = "App", Region = "Frankfurt" }
 }
 
 # =============================================================================
-# 8. WEB ASG  Frankfurt (desired=3, se registra en ALB publico)
-# user_data apunta al DNS del Internal ALB (estable aunque cambien IPs de App)
+# 8. WEB ASG Frankfurt (desired=3, registered in the public ALB)
+# user_data points to the Internal ALB DNS name, which remains stable when App IPs change.
 # =============================================================================
 module "web_asg" {
   source = "./modules/compute"
@@ -335,9 +336,10 @@ module "web_asg" {
 
   root_volume_size = var.root_volume_size
   root_volume_type = var.root_volume_type
+  common_tags      = local.common_tags
 
-  # Fase 2: se pasa el DNS del Internal ALB en lugar de una IP estatica.
-  # El DNS es inmutable durante la vida del Internal ALB.
+  # Phase 2: pass the Internal ALB DNS name instead of a static IP.
+  # The DNS name is immutable during the Internal ALB lifecycle.
   user_data = templatefile("${path.module}/modules/compute/user_data.sh.tpl", {
     tier                 = "web"
     app_port             = var.app_port
@@ -348,7 +350,7 @@ module "web_asg" {
 }
 
 # =============================================================================
-# 9. AUTO RECOVERY (Fase 1 Zonal Shift Closed-Loop, se mantiene sin cambios)
+# 9. AUTO RECOVERY (Phase 1 closed-loop Zonal Shift)
 # =============================================================================
 module "auto_recovery" {
   source = "./modules/auto_recovery"
@@ -360,12 +362,12 @@ module "auto_recovery" {
 }
 
 # =============================================================================
-# IRLANDA WARM STANDBY
-# Todos los recursos usan: provider = aws.ireland
+# IRELAND WARM STANDBY
+# All resources use provider = aws.ireland.
 # =============================================================================
 
 # =============================================================================
-# 10. VPC Irlanda
+# 10. VPC Ireland
 # =============================================================================
 module "vpc_ireland" {
   source    = "./modules/vpc"
@@ -379,7 +381,7 @@ module "vpc_ireland" {
 }
 
 # =============================================================================
-# 11. SECURITY GROUPS Irlanda
+# 11. SECURITY GROUPS Ireland
 # =============================================================================
 
 module "sg_alb_ireland" {
@@ -387,12 +389,18 @@ module "sg_alb_ireland" {
   providers = { aws = aws.ireland }
 
   name        = "${local.short_prefix}-alb-sg-ie"
-  description = "ALB SG Irlanda: permite HTTP desde internet"
+  description = "Ireland ALB SG: allows HTTP from the internet"
   vpc_id      = module.vpc_ireland.vpc_id
   tags        = { Name = "${local.short_prefix}-alb-sg-ie" }
 
   ingress_rules = [
-    { description = "HTTP", from_port = 80, to_port = 80, protocol = "tcp", cidr_blocks = ["0.0.0.0/0"] }
+    {
+      description = "HTTP from the internet"
+      from_port   = 80
+      to_port     = 80
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
   ]
 }
 
@@ -401,13 +409,13 @@ module "sg_web_ireland" {
   providers = { aws = aws.ireland }
 
   name        = "${local.short_prefix}-web-sg-ie"
-  description = "Web SG Irlanda: solo acepta trafico del ALB publico"
+  description = "Ireland Web SG: only accepts traffic from the public ALB"
   vpc_id      = module.vpc_ireland.vpc_id
   tags        = { Name = "${local.short_prefix}-web-sg-ie" }
 
   ingress_rules = [
     {
-      description     = "HTTP desde ALB publico Irlanda"
+      description     = "HTTP from Ireland public ALB"
       from_port       = var.web_port
       to_port         = var.web_port
       protocol        = "tcp"
@@ -421,13 +429,13 @@ module "sg_internal_alb_ireland" {
   providers = { aws = aws.ireland }
 
   name        = "${local.short_prefix}-int-alb-sg-ie"
-  description = "Internal ALB SG Irlanda: acepta trafico de Web en puerto app"
+  description = "Ireland Internal ALB SG: accepts Web traffic on the app port"
   vpc_id      = module.vpc_ireland.vpc_id
   tags        = { Name = "${local.short_prefix}-int-alb-sg-ie" }
 
   ingress_rules = [
     {
-      description     = "App port desde Web tier Irlanda"
+      description     = "App port from Ireland Web tier"
       from_port       = var.app_port
       to_port         = var.app_port
       protocol        = "tcp"
@@ -441,13 +449,13 @@ module "sg_app_ireland" {
   providers = { aws = aws.ireland }
 
   name        = "${local.short_prefix}-app-sg-ie"
-  description = "App SG Irlanda: solo acepta trafico del Internal ALB"
+  description = "Ireland App SG: only accepts traffic from the Internal ALB"
   vpc_id      = module.vpc_ireland.vpc_id
   tags        = { Name = "${local.short_prefix}-app-sg-ie" }
 
   ingress_rules = [
     {
-      description     = "App traffic desde Internal ALB Irlanda"
+      description     = "App traffic from Ireland Internal ALB"
       from_port       = var.app_port
       to_port         = var.app_port
       protocol        = "tcp"
@@ -457,9 +465,9 @@ module "sg_app_ireland" {
 }
 
 # =============================================================================
-# 12. IAM ROLES Irlanda
-# Los roles IAM son globales pero se crean aqui con provider alias para que
-# el instance profile quede en el contexto correcto de la region.
+# 12. IAM ROLES Ireland
+# IAM roles are global, but they are created here with the provider alias so the
+# instance profile is created in the correct regional context.
 # =============================================================================
 
 module "iam_web_ireland" {
@@ -487,7 +495,7 @@ module "iam_app_ireland" {
     "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
   ]
 
-  # Acceso R/W a la replica local de la Global Table (misma tabla, distinta replica)
+  # Read/write access to the local Global Table replica (same table, different replica).
   inline_policies = {
     "dynamodb-sessions-readwrite" = jsonencode({
       Version = "2012-10-17"
@@ -499,7 +507,7 @@ module "iam_app_ireland" {
             "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem",
             "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:Scan",
           ]
-          # ARN de la replica en Irlanda (misma tabla, region diferente)
+          # Ireland replica ARN (same table, different region).
           Resource = "arn:aws:dynamodb:${var.dr_region}:${data.aws_caller_identity.current.account_id}:table/${var.dynamodb_table_name}"
         }
       ]
@@ -508,7 +516,7 @@ module "iam_app_ireland" {
 }
 
 # =============================================================================
-# 13. INTERNAL ALB Irlanda (cross_zone=false, igual que Frankfurt)
+# 13. INTERNAL ALB Ireland (cross_zone=false, same as Frankfurt)
 # =============================================================================
 module "internal_alb_ireland" {
   source    = "./modules/alb"
@@ -520,7 +528,7 @@ module "internal_alb_ireland" {
   security_group_ids = [module.sg_internal_alb_ireland.security_group_id]
 
   internal                         = true
-  enable_cross_zone_load_balancing = false # Mismo razonamiento que Frankfurt
+  enable_cross_zone_load_balancing = false # Same reasoning as Frankfurt
   enable_zonal_shift               = false
 
   tg_port        = var.app_port
@@ -533,7 +541,7 @@ module "internal_alb_ireland" {
 }
 
 # =============================================================================
-# 14. ALB PUBLICO Irlanda (Zonal Shift ON, es el endpoint de failover)
+# 14. PUBLIC ALB Ireland (Zonal Shift ON, failover endpoint)
 # =============================================================================
 module "alb_ireland" {
   source    = "./modules/alb"
@@ -558,7 +566,7 @@ module "alb_ireland" {
 }
 
 # =============================================================================
-# 15. APP ASG Irlanda (Warm Standby: desired=1)
+# 15. APP ASG Ireland (Warm Standby: desired=1)
 # =============================================================================
 module "app_asg_ireland" {
   source    = "./modules/compute"
@@ -578,6 +586,7 @@ module "app_asg_ireland" {
 
   root_volume_size = var.root_volume_size
   root_volume_type = var.root_volume_type
+  common_tags      = local.ireland_common_tags
 
   user_data = templatefile("${path.module}/modules/compute/user_data.sh.tpl", {
     tier                 = "app"
@@ -589,7 +598,7 @@ module "app_asg_ireland" {
 }
 
 # =============================================================================
-# 16. WEB ASG Irlanda (Warm Standby: desired=1)
+# 16. WEB ASG Ireland (Warm Standby: desired=1)
 # =============================================================================
 module "web_asg_ireland" {
   source    = "./modules/compute"
@@ -609,6 +618,7 @@ module "web_asg_ireland" {
 
   root_volume_size = var.root_volume_size
   root_volume_type = var.root_volume_type
+  common_tags      = local.ireland_common_tags
 
   user_data = templatefile("${path.module}/modules/compute/user_data.sh.tpl", {
     tier                 = "web"
@@ -621,15 +631,15 @@ module "web_asg_ireland" {
 
 # =============================================================================
 # ROUTE 53 FAILOVER DNS
-# Route 53 es global: no requiere provider alias, usa el provider default.
+# Route 53 is global: it does not require a provider alias and uses the default provider.
 # =============================================================================
 
 # =============================================================================
-# 17. REGISTRO DNS PRIMARY - Frankfurt
-# IMPORTANTE:
-#   - set_identifier contiene la region exacta para que ARC Region Switch pueda
-#     mapear este record set con eu-central-1.
-#   - health_check_id usa el health check generado por ARC Region Switch.
+# 17. PRIMARY DNS RECORD - Frankfurt
+# IMPORTANT:
+#   - set_identifier contains the exact region so ARC Region Switch can
+#     map this record set to eu-central-1.
+#   - health_check_id uses the health check generated by ARC Region Switch.
 # =============================================================================
 resource "aws_route53_record" "primary" {
   zone_id = data.aws_route53_zone.main.zone_id
@@ -651,11 +661,11 @@ resource "aws_route53_record" "primary" {
 }
 
 # =============================================================================
-# 18. REGISTRO DNS SECONDARY - Irlanda
-# IMPORTANTE:
-#   - set_identifier contiene la region exacta para que ARC Region Switch pueda
-#     mapear este record set con eu-west-1.
-#   - health_check_id usa el health check generado por ARC Region Switch.
+# 18. SECONDARY DNS RECORD - Ireland
+# IMPORTANT:
+#   - set_identifier contains the exact region so ARC Region Switch can
+#     map this record set to eu-west-1.
+#   - health_check_id uses the health check generated by ARC Region Switch.
 # =============================================================================
 resource "aws_route53_record" "secondary" {
   zone_id = data.aws_route53_zone.main.zone_id
@@ -681,7 +691,7 @@ resource "aws_route53_record" "secondary" {
 # =============================================================================
 
 # =============================================================================
-# 20. IAM ROLE - Execution Role del ARC Region Switch Plan
+# 20. IAM ROLE - Execution role for the ARC Region Switch Plan
 # =============================================================================
 data "aws_iam_policy_document" "arc_plan_assume_role" {
   statement {
@@ -790,12 +800,12 @@ resource "aws_iam_role_policy" "arc_plan_permissions" {
 }
 
 # =============================================================================
-# 21. ARC REGION SWITCH PLAN - Core del TFG Fase 2
+# 21. ARC REGION SWITCH PLAN - Core of TFG Phase 2
 #
 # Workflow:
-#   Paso 1: escalar el ASG App de Irlanda.
-#   Paso 2: escalar el ASG Web de Irlanda.
-#   Paso 3: redirigir trafico via Route 53 Health Check.
+#   Step 1: scale the Ireland App ASG.
+#   Step 2: scale the Ireland Web ASG.
+#   Step 3: redirect traffic through the Route 53 Health Check.
 # =============================================================================
 resource "aws_arcregionswitch_plan" "main_dr_plan" {
   name              = "${var.project_prefix}-dr-plan"

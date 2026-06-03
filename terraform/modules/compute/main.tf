@@ -1,35 +1,35 @@
 # =============================================================================
-# COMPUTE MODULE — main.tf  (Fase 2: refactorizado a ASG + Launch Template)
+# Compute module
 #
-# Sustituye aws_instance por:
-#   aws_launch_template  → define la configuración de las instancias
-#   aws_autoscaling_group → gestiona el ciclo de vida y la capacidad
+# Replaces aws_instance with:
+#   aws_launch_template  -> defines instance configuration
+#   aws_autoscaling_group -> manages lifecycle and capacity
 #
-# Ventajas del cambio:
-#   - desired_capacity configurable por región (3 activa, 1 standby)
-#   - Auto-registro en Target Groups via var.target_group_arns
-#   - Elasticidad automática ante fallos de instancia
-#   - Compatible con ARC Region Switch (el plan puede modificar desired_capacity)
+# Change benefits:
+#   - desired_capacity is configurable per region (3 active, 1 standby)
+#   - Auto-registration in Target Groups through var.target_group_arns
+#   - Automatic elasticity after instance failures
+#   - Compatible with ARC Region Switch (the plan can modify desired_capacity)
 #
-# Seguridad (se mantienen todos los hardening de Fase 1):
-#   - IMDSv2 obligatorio (http_tokens = "required")
-#   - EBS raíz cifrado
-#   - Sin SSH (acceso únicamente vía SSM Session Manager)
+# Security (keeps all Phase 1 hardening):
+#   - IMDSv2 required (http_tokens = "required")
+#   - Encrypted root EBS volume
+#   - No SSH (access only through SSM Session Manager)
 # =============================================================================
 
-# ── Launch Template ───────────────────────────────────────────────────────────
-# Define la plantilla que el ASG usa para lanzar cada instancia.
-# Equivale al antiguo aws_instance pero desacoplado de la gestión de capacidad.
+# Launch Template
+# Defines the template used by the ASG to launch each instance.
+# Equivalent to the previous aws_instance, but decoupled from capacity management.
 resource "aws_launch_template" "this" {
   name_prefix   = "${var.name_prefix}-lt-"
   image_id      = var.ami_id
   instance_type = var.instance_type
   description   = "Launch template for ${var.name_prefix} ASG"
 
-  # User data: el caller pasa la cadena ya renderizada con templatefile()
+  # User data: the caller passes the already-rendered string with templatefile().
   user_data = var.user_data != null ? base64encode(var.user_data) : null
 
-  # Perfil IAM — SSM + permisos de la capa (web/app)
+  # IAM profile: SSM plus tier-specific permissions (web/app).
   iam_instance_profile {
     name = var.iam_instance_profile_name
   }
@@ -37,7 +37,7 @@ resource "aws_launch_template" "this" {
   # Security Groups
   vpc_security_group_ids = var.security_group_ids
 
-  # Enforce IMDSv2 — previene ataques SSRF de robo de credenciales
+  # Enforce IMDSv2: prevents SSRF credential theft attacks.
   # Ref: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html
   metadata_options {
     http_endpoint               = "enabled"
@@ -45,7 +45,7 @@ resource "aws_launch_template" "this" {
     http_put_response_hop_limit = 1
   }
 
-  # EBS raíz — cifrado en reposo, sin coste adicional en gp3
+  # Root EBS: encryption at rest, with no extra cost on gp3.
   block_device_mappings {
     device_name = "/dev/xvda"
 
@@ -57,7 +57,7 @@ resource "aws_launch_template" "this" {
     }
   }
 
-  # Tag propagation — las instancias lanzadas heredan estos tags
+  # Tag propagation: launched instances inherit these tags.
   tag_specifications {
     resource_type = "instance"
     tags = merge(
@@ -87,34 +87,34 @@ resource "aws_launch_template" "this" {
   }
 }
 
-# ── Auto Scaling Group ────────────────────────────────────────────────────────
-# Gestiona la capacidad y el ciclo de vida de las instancias.
-# Se registra automáticamente en el/los target groups configurados.
+# Auto Scaling Group
+# Manages instance capacity and lifecycle.
+# Automatically registers in the configured target group(s).
 resource "aws_autoscaling_group" "this" {
   name_prefix = "${var.name_prefix}-asg-"
 
-  # Distribución multi-AZ — una subnet privada por AZ
+  # Multi-AZ distribution: one private subnet per AZ.
   vpc_zone_identifier = var.subnet_ids
 
   desired_capacity = var.desired_capacity
   min_size         = var.min_size
   max_size         = var.max_size
 
-  # Registro automático en los ALB Target Groups indicados
+  # Automatic registration in the provided ALB Target Groups.
   target_group_arns = var.target_group_arns
 
-  # Health check vía ELB (más preciso que EC2) para sustituir instancias
-  # que fallen el health check del ALB, no solo las que fallen a nivel de EC2.
+  # ELB health checks are more precise than EC2 checks and replace instances
+  # that fail the ALB health check, not only EC2-level checks.
   health_check_type         = "ELB"
-  health_check_grace_period = 120 # segundos — da tiempo a que el user_data arranque
+  health_check_grace_period = 120 # seconds; gives user_data time to start
 
   launch_template {
     id      = aws_launch_template.this.id
     version = "$Latest"
   }
 
-  # Estrategia de refresco de instancias — sustituye instancias gradualmente
-  # cuando cambia el Launch Template (e.g., nuevo AMI / user_data).
+  # Instance refresh strategy: gradually replaces instances when the Launch
+  # Template changes (e.g., new AMI or user_data).
   instance_refresh {
     strategy = "Rolling"
     preferences {
@@ -148,14 +148,14 @@ resource "aws_autoscaling_group" "this" {
 
   lifecycle {
     create_before_destroy = true
-    # Ignorar cambios de desired_capacity realizados por ARC Region Switch Plan
-    # o por políticas de escalado automático durante la operación normal.
+    # Ignore desired_capacity changes made by ARC Region Switch Plan or by
+    # automatic scaling policies during normal operation.
     ignore_changes = [desired_capacity]
   }
 }
 
 # =============================================================================
-# Required providers — permite que el root pase provider aliases (e.g. aws.ireland)
+# Required providers: allows the root module to pass provider aliases.
 # Ref: https://developer.hashicorp.com/terraform/language/modules/develop/providers
 # =============================================================================
 terraform {

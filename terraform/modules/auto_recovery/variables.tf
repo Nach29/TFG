@@ -1,5 +1,5 @@
 # =============================================================================
-# AUTO-RECOVERY MODULE — variables.tf
+# Auto-recovery module variables
 #
 # Input variables for the Closed-Loop ARC Zonal Shift auto-recovery system.
 # =============================================================================

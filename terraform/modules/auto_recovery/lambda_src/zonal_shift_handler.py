@@ -3,7 +3,7 @@ zonal_shift_handler.py
 ======================
 Closed-Loop Auto-Recovery via ARC Zonal Shift.
 
-Triggered directly by a CloudWatch Alarm (direct invocation feature —
+Triggered directly by a CloudWatch Alarm (direct invocation feature;
 no SNS/EventBridge hop required).
 
 Flow:
@@ -89,7 +89,8 @@ def _validate_alarm_state(event: dict) -> bool:
     )
     if state != "ALARM":
         logger.info(
-            "Alarm state is '%s' — not ALARM, skipping zonal shift action.", state
+            "Alarm state is '%s'; not ALARM, skipping zonal shift action.",
+            state,
         )
         return False
     return True
@@ -102,7 +103,6 @@ def _start_zonal_shift(az: str) -> dict:
     The expiry time is computed as UTC now + EXPIRY_MINUTES. ARC requires
     an ISO-8601 datetime string ending in 'Z'.
     """
-    
     az_id = AZ_MAPPING.get(az)
     if not az_id:
         raise ValueError(f"No AZ ID mapping found for {az}")
@@ -149,7 +149,7 @@ def lambda_handler(event: dict, context) -> dict:  # noqa: ANN001
 
     # --- Guard: only proceed on actual ALARM state transitions ---
     if not _validate_alarm_state(event):
-        return {"statusCode": 200, "body": "No action — alarm not in ALARM state."}
+        return {"statusCode": 200, "body": "No action; alarm not in ALARM state."}
 
     # --- Extract the impaired AZ from the alarm dimensions ---
     az = _extract_failing_az(event)
@@ -169,6 +169,9 @@ def lambda_handler(event: dict, context) -> dict:  # noqa: ANN001
                 f"zonalShiftId={response.get('zonalShiftId')}"
             ),
         }
+    except ValueError as exc:
+        logger.error("Invalid alarm payload for zonal shift: %s", exc)
+        return {"statusCode": 400, "body": str(exc)}
     except ClientError as exc:
         error_code = exc.response["Error"]["Code"]
         error_msg = exc.response["Error"]["Message"]

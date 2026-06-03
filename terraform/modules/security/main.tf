@@ -1,4 +1,4 @@
-# 1. Creamos el contenedor del Security Group
+# Create the Security Group container.
 resource "aws_security_group" "this" {
   name        = var.name
   description = var.description
@@ -10,7 +10,7 @@ resource "aws_security_group" "this" {
   }
 }
 
-# Locals to split rules depending on whether they use cidr_blocks or security_groups
+# Split rules depending on whether they use cidr_blocks or security_groups.
 locals {
   ingress_with_cidr   = { for idx, r in var.ingress_rules : idx => r if r.cidr_blocks != null && length(r.cidr_blocks) > 0 }
   ingress_with_sg_raw = { for idx, r in var.ingress_rules : idx => r if r.security_groups != null && length(r.security_groups) > 0 }
@@ -27,7 +27,7 @@ locals {
   }
 }
 
-# 2. Creamos las reglas de entrada (Ingress) basadas en CIDR lists
+# Ingress rules based on CIDR lists.
 resource "aws_security_group_rule" "ingress_cidr" {
   for_each = local.ingress_with_cidr
 
@@ -41,7 +41,7 @@ resource "aws_security_group_rule" "ingress_cidr" {
   cidr_blocks = each.value.cidr_blocks
 }
 
-# 2b. Reglas de entrada donde la fuente son otros security groups (un recurso por cada sg)
+# Ingress rules where the source is another Security Group.
 resource "aws_security_group_rule" "ingress_sg" {
   for_each = local.ingress_sg_pairs
 
@@ -54,7 +54,7 @@ resource "aws_security_group_rule" "ingress_sg" {
   source_security_group_id = each.value.sg
 }
 
-# 3. Creamos las reglas de salida (Egress) basadas en CIDR lists
+# Egress rules based on CIDR lists.
 resource "aws_security_group_rule" "egress_cidr" {
   for_each = local.egress_with_cidr
 
@@ -68,7 +68,7 @@ resource "aws_security_group_rule" "egress_cidr" {
   cidr_blocks = each.value.cidr_blocks
 }
 
-# 3b. Reglas de salida donde la fuente son otros security groups (un recurso por cada sg)
+# Egress rules where the destination is another Security Group.
 resource "aws_security_group_rule" "egress_sg" {
   for_each = local.egress_sg_pairs
 
@@ -80,8 +80,9 @@ resource "aws_security_group_rule" "egress_sg" {
   protocol                 = each.value.rule.protocol
   source_security_group_id = each.value.sg
 }
+
 # =============================================================================
-# Required providers — permite que el root pase provider aliases (e.g. aws.ireland)
+# Required providers: allows the root module to pass provider aliases.
 # Ref: https://developer.hashicorp.com/terraform/language/modules/develop/providers
 # =============================================================================
 terraform {
